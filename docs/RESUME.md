@@ -1,16 +1,17 @@
-# Server session state — 2026-10-02 (session complete)
+# Server session state — 2026-10-02 (paused / stopped at user request)
 
-First server session finished: venv bootstrapped, v0.1 debugged to 28/28
-tests, rover smoke run, SB3 baseline proof, and the full 600k walker run on
-`field_open` completed. Nothing is committed yet (see Housekeeping).
+All training stopped; every checkpoint is on disk under `runs/` (gitignored,
+exists only on this machine). First server session results are complete.
 
 ## Headline results (all under `runs/`)
 
 | run | budget | result |
 |---|---|---|
 | `walker_field_open_s0` | **600k steps, complete** | ret −3 → ~41 (last-10 mean 41.1); speed 0.3 → **0.75 m/s**; food 0 → 8-12/ep; **milestones 5/6**: Navigator@14, ToolUser@19, Survivor@31, Forager@44, **Walking@271**. No gait tuning needed — walking emerged inside budget. |
-| `rover_field_small_s0` | 50k steps | ret 1.1 → ~3.5, drives ~0.7-1.1 m/s; no milestone (Walking needs rolling ≥1.2 m/s — needs a longer run) |
+| `rover_field_small_200k_s0` | 200k steps | peak rolling ret 8.3 / speed **1.09 m/s** (ep ~120-140), then oscillates down to ~4-5 — the constant-lr reference PPO can't hold its peak; rover Walking (≥1.2 m/s rolling) needs a stronger optimizer, not env changes |
+| `rover_field_small_s0` | 50k steps | ret 1.1 → ~3.5, drives ~0.7-1.1 m/s; no milestone |
 | `sb3_rover_field_small_s0` | 30k steps | last-10 mean ret **18.0** vs built-in PPO **2.5** at the same budget |
+| `sb3_walker_field_open_s0` | 300k steps (complete) | last-10 mean ret **46.3** — beats the built-in walker's ~41 with **half** the steps; checkpoint `sb3_policy.zip` saved |
 
 - The paused first attempt is kept as `runs/walker_field_open_s0_paused254k`
   (deterministic prefix of the final run; the rerun reproduced it exactly —
