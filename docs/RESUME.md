@@ -1,0 +1,51 @@
+# Server session state — 2026-10-02 (session complete)
+
+First server session finished: venv bootstrapped, v0.1 debugged to 28/28
+tests, rover smoke run, SB3 baseline proof, and the full 600k walker run on
+`field_open` completed. Nothing is committed yet (see Housekeeping).
+
+## Headline results (all under `runs/`)
+
+| run | budget | result |
+|---|---|---|
+| `walker_field_open_s0` | **600k steps, complete** | ret −3 → ~41 (last-10 mean 41.1); speed 0.3 → **0.75 m/s**; food 0 → 8-12/ep; **milestones 5/6**: Navigator@14, ToolUser@19, Survivor@31, Forager@44, **Walking@271**. No gait tuning needed — walking emerged inside budget. |
+| `rover_field_small_s0` | 50k steps | ret 1.1 → ~3.5, drives ~0.7-1.1 m/s; no milestone (Walking needs rolling ≥1.2 m/s — needs a longer run) |
+| `sb3_rover_field_small_s0` | 30k steps | last-10 mean ret **18.0** vs built-in PPO **2.5** at the same budget |
+
+- The paused first attempt is kept as `runs/walker_field_open_s0_paused254k`
+  (deterministic prefix of the final run; the rerun reproduced it exactly —
+  verified byte-identical trainer output through update 124).
+- Plots: `curves_episodes.png` + `curves_updates.png` per run; replays in
+  `demo.gif`. Walker exploration plateaus at ~0.12 — the **Explorer milestone
+  (≥0.5) is unreachable** at this world size/episode budget; either shrink the
+  threshold (≈0.15), raise `max_steps`, or strengthen `w_novelty` (design call,
+  not a bug).
+- README hero image: `docs/screenshot.png` (rover | walker frames from the GIFs).
+
+## Code changed (uncommitted working tree on `main`, base `beee896`)
+
+Fixes: `config.py::_merge` recursive nested-dataclass merge; PPO `g_logstd`
+broadcast + threaded RNG (no global np.random); `move_circle` sub-stepping
+(no wall tunneling); `mean_speed` now true m/s; renderer casts screen points
+to plain floats (pygame-ce rejects np.float32); `action_dim(kind)` call sites;
+viewer chart fed during `--watch`. Tests: 3 expectation fixes + missing import.
+
+Features: `python -m aera sb3` (Monitor CSV + logger CSV), `python -m aera
+plot <run_dir>`, README hero + artifacts section, `.gitignore` (runs/, .venv/).
+
+## Suggested next steps
+
+1. Commit the tree (3 commits: fixes / sb3+plot features / docs). Then add
+   `AGENTS.md` + `log.md` to the repo, updating §7 with the new `sb3`/`plot`
+   verbs and §10 with the run results.
+2. Rover to milestone: train `field_small` rover ~200k (Walking needs rolling
+   ≥1.2 m/s; it was at ~0.7 at 50k) or move the rover to `field_open`.
+3. Decide the Explorer question above.
+4. Longer-term (design log): two-agent coexistence, tool crafting, SB3 walker
+   comparison run (SB3 was only run on the rover smoke world).
+
+## Viewing from a laptop
+
+`python -m http.server 8000 --bind 127.0.0.1` inside `runs/` (left running)
++ `ssh -L 8000:localhost:8000 <user>@node0.quickhttpnode15.cloudfaas-pg0.wisc.cloudlab.us`
+→ http://localhost:8000. Live viewer: `ssh -X` + `python -m aera train --watch`.
