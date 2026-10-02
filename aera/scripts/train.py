@@ -1,0 +1,53 @@
+"""Train an agent: python -m aera.scripts.train --config configs/field_open.json
+
+Add --watch to watch the world live while the policy trains (same env the
+trainer is learning from), or run headless on a server and watch later with
+aera.scripts.watch.
+"""
+from __future__ import annotations
+
+import argparse
+import os
+
+from ..config import Config
+from ..training.trainer import Trainer
+
+
+def main(argv=None) -> str:
+    p = argparse.ArgumentParser(description="AERA trainer (built-in PPO)")
+    p.add_argument("--config", default="configs/field_open.json",
+                   help="world/agent/reward JSON (see configs/)")
+    p.add_argument("--agent", choices=("walker", "rover"), default=None,
+                   help="override the agent kind from the config")
+    p.add_argument("--steps", type=int, default=200_000,
+                   help="total env steps")
+    p.add_argument("--rollout", type=int, default=2048)
+    p.add_argument("--out", default=None, help="run directory (default runs/<name>)")
+    p.add_argument("--seed", type=int, default=0)
+    p.add_argument("--watch", action="store_true",
+                   help="open the live 3D viewer during training")
+    p.add_argument("--fps", type=int, default=30, help="viewer frame cap")
+    args = p.parse_args(argv)
+
+    config = Config.load(args.config)
+    if args.agent:
+        config.agent.kind = args.agent
+
+    name = os.path.splitext(os.path.basename(args.config))[0]
+    out = args.out or os.path.join("runs", f"{config.agent.kind}_{name}_s{args.seed}")
+    os.makedirs(out, exist_ok=True)
+
+    viewer = None
+    if args.watch:
+        from ..viz.viewer import Viewer
+        viewer = Viewer(fps=args.fps)
+
+    print(f"AERA training → {out}  (agent={config.agent.kind}, "
+          f"world={config.world.name}, steps={args.steps})")
+    Trainer(config, out, total_steps=args.steps, rollout=args.rollout,
+            seed=args.seed, viewer=viewer).train()
+    return out
+
+
+if __name__ == "__main__":
+    main()

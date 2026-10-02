@@ -1,0 +1,26 @@
+{
+  "world": {
+    "name": "Hedge Lands",
+    "width": 40,
+    "height": 40,
+    "seed": 11,
+    "terrain": { "mud_patches": 3, "lava_pools": 3, "pits": 2, "road": true },
+    "walls": {
+      "border": true,
+      "rects": [
+        [6, 6, 1, 10], [6, 6, 9, 1], [18, 0, 1, 9], [26, 8, 8, 1],
+        [12, 16, 8, 1], [30, 18, 1, 9], [8, 28, 1, 8], [18, 26, 10, 1]
+      ]
+    },
+    "entities": { "foods": 12, "food_respawn_ticks": 250, "tools": ["boots"], "beacon": [36, 36] }
+  },
+  "agent": { "kind": "walker", "view_rays": 14, "view_range": 11.0, "cpg": true, "scent": true },
+  "sim": { "dt": 0.1, "max_steps": 2400 },
+  "reward": { "w_food": 3.0, "w_survive": 0.01, "w_novelty": 0.08, "w_progress": 0.05,
+              "w_damage": 0.5, "w_death": 5.0, "w_beacon": 10.0, "beacon_terminates": false },
+  "curriculum": [
+    { "until_episode": 30,  "set": { "hunger_rate": 0.0, "lava_damage": 0.0 } },
+    { "until_episode": 120, "set": { "hunger_rate": 0.8, "lava_damage": 0.0 } },
+    { "until_episode": -1,  "set": { "hunger_rate": 0.8, "lava_damage": 9.0 } }
+  ]
+}

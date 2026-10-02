@@ -1,0 +1,16 @@
+{
+  "world": {
+    "name": "Small Arena",
+    "width": 16,
+    "height": 16,
+    "seed": 3,
+    "terrain": { "mud_patches": 1, "lava_pools": 0, "pits": 0, "road": false },
+    "walls": { "border": true, "rects": [] },
+    "entities": { "foods": 4, "food_respawn_ticks": 200, "tools": [], "beacon": null }
+  },
+  "agent": { "kind": "rover", "view_rays": 10, "view_range": 8.0, "scent": true },
+  "sim": { "dt": 0.1, "max_steps": 600 },
+  "reward": { "w_food": 3.0, "w_survive": 0.01, "w_novelty": 0.06, "w_progress": 0.05,
+              "w_damage": 0.5, "w_death": 5.0, "w_beacon": 10.0, "beacon_terminates": false },
+  "curriculum": [ { "until_episode": -1, "set": {} } ]
+}

@@ -1,0 +1,175 @@
+"""The World: terrain grid + wall rects + entities + geometric queries.
+
+Units are metres; one cell = 1m. The world is *static* except for food
+respawn timers; agents live outside this class (see aera/agents) and ask the
+world for movement collision (`move_circle`) and sensing geometry
+(`raycast`, `line_of_sight`).
+"""
+from __future__ import annotations
+
+import math
+
+import numpy as np
+
+from ..config import WorldCfg
+from .entities import Beacon, Food, Tool, place_free
+from .terrain import Terrain, TerrainGrid
+
+
+def _rects_to_floats(cell_rects: list) -> list[tuple[float, float, float, float]]:
+    return [(float(x), float(y), float(w), float(h)) for x, y, w, h in cell_rects]
+
+
+class World:
+    def __init__(self, cfg: WorldCfg):
+        self.cfg = cfg
+        self.w = float(cfg.width)
+        self.h = float(cfg.height)
+        self.rng = np.random.default_rng(cfg.seed)
+        self.tick = 0
+
+        t = cfg.terrain
+        self.terrain = TerrainGrid(cfg.width, cfg.height, self.rng,
+                                   mud_patches=t.mud_patches, lava_pools=t.lava_pools,
+                                   pits=t.pits, road=t.road)
+
+        # walls: border + configured rects (cell coords → metres)
+        self.walls: list[tuple[float, float, float, float]] = []
+        if cfg.walls.border:
+            self.walls += [(-1.0, -1.0, self.w + 2.0, 1.0),      # top
+                           (-1.0, self.h, self.w + 2.0, 1.0),    # bottom
+                           (-1.0, -1.0, 1.0, self.h + 2.0),      # left
+                           (self.w, -1.0, 1.0, self.h + 2.0)]    # right
+        self.walls += _rects_to_floats(cfg.walls.rects)
+
+        self.foods: list[Food] = []
+        self.tools: list[Tool] = []
+        self.beacon: Beacon | None = None
+        self._spawn_entities()
+
+        self._passable_cells = self._count_passable()
+
+    # ----------------------------------------------------------- spawning
+    def _spawn_entities(self) -> None:
+        e = self.cfg.entities
+        for (x, y) in place_free(e.foods, self, self.rng):
+            self.foods.append(Food(x=x, y=y))
+        for kind in e.tools:
+            spots = place_free(1, self, self.rng, min_spawn_dist=0.0)
+            if spots:
+                self.tools.append(Tool(x=spots[0][0], y=spots[0][1], kind=kind))
+        if e.beacon is not None:
+            bx, by = e.beacon
+            self.beacon = Beacon(x=float(bx) + 0.5, y=float(by) + 0.5)
+
+    def reset_episode(self) -> None:
+        """Per-episode reset: foods come back, tools return to pedestals."""
+        self.tick = 0
+        for f in self.foods:
+            f.active = True
+            f.respawn_at = -1
+        for tool in self.tools:
+            tool.taken = False
+        if self.beacon is not None:
+            self.beacon.hit = False
+
+    def step_time(self) -> None:
+        self.tick += 1
+        for f in self.foods:
+            if not f.active and f.respawn_at >= 0 and self.tick >= f.respawn_at:
+                f.active = True
+                f.respawn_at = -1
+
+    # ------------------------------------------------------------ queries
+    def cell_ok(self, cx: int, cy: int) -> bool:
+        """A cell is ok for spawning if terrain is safe and no wall covers it."""
+        if not (0 <= cx < self.w and 0 <= cy < self.h):
+            return False
+        t = Terrain(int(self.terrain.grid[cy, cx]))
+        if t in (Terrain.LAVA, Terrain.PIT):
+            return False
+        return not self._rect_contains(self.walls, cx + 0.5, cy + 0.5)
+
+    def passable_cells(self) -> int:
+        return self._passable_cells
+
+    def _count_passable(self) -> int:
+        n = 0
+        for cy in range(int(self.h)):
+            for cx in range(int(self.w)):
+                if self.cell_ok(cx, cy):
+                    n += 1
+        return max(1, n)
+
+    @staticmethod
+    def _rect_contains(rects, x: float, y: float) -> bool:
+        for (rx, ry, rw, rh) in rects:
+            if rx <= x <= rx + rw and ry <= y <= ry + rh:
+                return True
+        return False
+
+    def blocked_at(self, x: float, y: float, airborne: bool) -> bool:
+        """Point blocked for a ground-mover? PIT blocks unless airborne."""
+        if self._rect_contains(self.walls, x, y):
+            return True
+        t = self.terrain.at(x, y)
+        return t == Terrain.PIT and not airborne
+
+    def terrain_at(self, x: float, y: float) -> Terrain:
+        return self.terrain.at(x, y)
+
+    def move_circle(self, x: float, y: float, dx: float, dy: float,
+                    r: float, airborne: bool) -> tuple[float, float]:
+        """Axis-separated movement of a circle with push-back against walls
+        and pit cells. Cheap, stable, good enough at this scale."""
+        nx = x + dx
+        if self._circle_free(nx, y, r, airborne):
+            x = nx
+        ny = y + dy
+        if self._circle_free(x, ny, r, airborne):
+            y = ny
+        return x, y
+
+    def _circle_free(self, x: float, y: float, r: float, airborne: bool) -> bool:
+        return not (self.blocked_at(x - r, y - r, airborne) or
+                    self.blocked_at(x + r, y - r, airborne) or
+                    self.blocked_at(x - r, y + r, airborne) or
+                    self.blocked_at(x + r, y + r, airborne))
+
+    # ------------------------------------------------------------- raycast
+    def raycast(self, ox: float, oy: float, angle: float,
+                max_dist: float) -> float:
+        """Distance to the nearest wall (including world bounds) along a ray."""
+        best = max_dist
+        dx, dy = math.cos(angle), math.sin(angle)
+        for (rx, ry, rw, rh) in self.walls:
+            t = _ray_slab(ox, oy, dx, dy, rx, ry, rw, rh)
+            if t is not None and 0.0 <= t < best:
+                best = t
+        return best
+
+    def line_of_sight(self, ax: float, ay: float, bx: float, by: float) -> bool:
+        d = math.hypot(bx - ax, by - ay)
+        if d < 1e-6:
+            return True
+        return self.raycast(ax, ay, math.atan2(by - ay, bx - ax), d) >= d - 1e-3
+
+
+def _ray_slab(ox: float, oy: float, dx: float, dy: float,
+              rx: float, ry: float, rw: float, rh: float) -> float | None:
+    """Ray vs AABB slab test → entry distance or None."""
+    tmin, tmax = -math.inf, math.inf
+    for o, d, lo, hi in ((ox, dx, rx, rx + rw), (oy, dy, ry, ry + rh)):
+        if abs(d) < 1e-9:
+            if o < lo or o > hi:
+                return None
+        else:
+            t1, t2 = (lo - o) / d, (hi - o) / d
+            if t1 > t2:
+                t1, t2 = t2, t1
+            tmin, tmax = max(tmin, t1), min(tmax, t2)
+            if tmin > tmax:
+                return None
+    if tmax < 0:
+        return None
+    return max(tmin, 0.0)

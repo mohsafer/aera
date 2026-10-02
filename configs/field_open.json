@@ -1,0 +1,20 @@
+{
+  "world": {
+    "name": "Open Field",
+    "width": 32,
+    "height": 32,
+    "seed": 7,
+    "terrain": { "mud_patches": 2, "lava_pools": 1, "pits": 1, "road": false },
+    "walls": { "border": true, "rects": [[8, 6, 5, 1], [20, 14, 1, 7], [12, 24, 6, 1]] },
+    "entities": { "foods": 8, "food_respawn_ticks": 300, "tools": ["boots"], "beacon": [28, 28] }
+  },
+  "agent": { "kind": "walker", "view_rays": 12, "view_range": 10.0, "cpg": true, "scent": true },
+  "sim": { "dt": 0.1, "max_steps": 2000 },
+  "reward": { "w_food": 3.0, "w_survive": 0.01, "w_novelty": 0.06, "w_progress": 0.05,
+              "w_damage": 0.5, "w_death": 5.0, "w_beacon": 10.0, "beacon_terminates": false },
+  "curriculum": [
+    { "until_episode": 40,  "set": { "hunger_rate": 0.0, "lava_damage": 0.0 } },
+    { "until_episode": 150, "set": { "hunger_rate": 0.8, "lava_damage": 0.0 } },
+    { "until_episode": -1,  "set": { "hunger_rate": 0.8, "lava_damage": 9.0 } }
+  ]
+}
