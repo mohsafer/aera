@@ -35,7 +35,7 @@ def test_wall_rect_blocks_raycast():
     cfg.walls.rects = [[10, 10, 1, 4]]
     w = World(cfg)
     d = w.raycast(8.5, 11.5, 0.0, 30.0)    # east toward the wall segment
-    assert d == pytest.approx(1.0, abs=0.05)  # wall starts at x=10
+    assert d == pytest.approx(1.5, abs=0.05)  # wall face at x=10, origin x=8.5
 
 
 def test_lava_and_pit_cells_exist_and_block():

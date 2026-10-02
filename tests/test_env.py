@@ -63,7 +63,7 @@ def test_energy_drains_and_episode_terminates():
 
 def test_lava_damages():
     cfg = tiny_cfg()
-    cfg.terrain.lava_pools = 0
+    cfg.world.terrain.lava_pools = 0
     cfg.curriculum = [{"until_episode": -1, "set": {}}]   # dangers on
     env = AeraEnv(cfg)
     env.reset(seed=3)

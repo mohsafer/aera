@@ -3,6 +3,7 @@ import numpy as np
 from aera.agents.agent import Agent
 from aera.config import AgentCfg, WorldCfg
 from aera.world.physics import integrate, gait_score
+from aera.world.terrain import Terrain
 from aera.world.world import World
 
 
@@ -66,7 +67,7 @@ def test_pit_blocks_until_jump():
     cfg = WorldCfg(width=20, height=20, seed=9)
     cfg.terrain.pits = 1
     w = World(cfg)
-    pit = w.terrain.cells_of(4)[0]            # Terrain.PIT == 4
+    pit = w.terrain.cells_of(Terrain.PIT)[0]
     px, py = pit[0] + 0.5, pit[1] + 0.5
     a = make_agent("walker")
     a.x, a.y = px - 1.0, py

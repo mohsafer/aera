@@ -94,8 +94,8 @@ def render_scene(world, agents, camera: Camera, size=(426, 240),
             cy = q[0] * up[0] + q[1] * up[1] + q[2] * up[2]
             sx = (cx / (cz * tan_f * aspect)) * (W / 2) + W / 2
             sy = H / 2 - (cy / (cz * tan_f)) * (H / 2)
-            scr.append((sx, sy))
-            depth += cz
+            scr.append((float(sx), float(sy)))   # plain floats: pygame rejects np.float32 scalars
+            depth += float(cz)
         if ok:
             polys.append((depth / len(pts), scr, color))
 

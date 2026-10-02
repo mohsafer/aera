@@ -4,4 +4,7 @@ pygame-ce>=2.5        # or vanilla pygame>=2.5 — both provide `import pygame`
 gymnasium>=0.29
 # Optional extras
 pillow>=10.0          # only needed for `--record` GIF export
+matplotlib>=3.8       # only needed for `python -m aera plot`
 pytest>=8.0           # dev/tests
+# Modern-baseline proof (`python -m aera sb3`) — heavy, install separately:
+#   pip install torch --index-url https://download.pytorch.org/whl/cpu stable-baselines3

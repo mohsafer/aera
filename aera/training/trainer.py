@@ -36,7 +36,7 @@ class Trainer:
     def train(self) -> str:
         env = AeraEnv(self.config)
         obs_dim_ = obs_dim(self.config.agent)
-        act_dim_ = action_dim(self.config.agent)
+        act_dim_ = action_dim(self.config.agent.kind)
         ppo = PPO(obs_dim_, act_dim_, seed=self.seed)
         self.config.save(os.path.join(self.out, "config_used.json"))
 
@@ -110,6 +110,8 @@ class Trainer:
     def _on_episode_end(self, ep: dict, env: AeraEnv) -> None:
         self.episodes.append(ep)
         self.logger.log({"type": "episode", **ep})
+        if self.viewer is not None:
+            self.viewer.chart.push(ep["ret"])
         for name in self.milestones.update(ep):
             print(f"\n★ SKILL UNLOCKED: {name} (episode {ep['episode']})\n", flush=True)
             self.logger.log({"type": "milestone", "skill": name,
@@ -121,6 +123,6 @@ class Trainer:
 
 
 def load_policy(path: str, config) -> PPO:
-    ppo = PPO(obs_dim(config.agent), action_dim(config.agent))
+    ppo = PPO(obs_dim(config.agent), action_dim(config.agent.kind))
     ppo.load(path)
     return ppo

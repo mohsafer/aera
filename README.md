@@ -12,6 +12,8 @@ Built for students and RL tinkerers: the environment is a standard
 is one JSON config, and a dependency-free **numpy PPO** is included so you
 can train out of the box.
 
+![AERA in action — the rover foraging (left) and the walker mid-gait (right) in the retro 3D field](docs/screenshot.png)
+
 ```text
       ┌────────────┐   obs (rays/proprio/terrain)   ┌────────────┐
       │   WORLD    │ ─────────────────────────────▶ │  POLICY    │
@@ -75,9 +77,25 @@ episode logs to `runs/<name>/metrics.jsonl`.
 
 - [x] v0.1 — world, two bodies, senses, rewards+curriculum, numpy PPO,
       3D viewer/recorder, milestones, tests
-- [ ] first long training runs (walker: walking; rover: foraging)
-- [ ] optional Stable-Baselines3 script as the "modern baseline" proof
+- [x] first training runs (rover smoke 50k; walker 600k on the curriculum
+      world — walking, foraging, tool use, beacon)
+- [x] Stable-Baselines3 proof: `python -m aera sb3` (SB3 PPO reaches ~7×
+      the built-in PPO's return at equal steps on the smoke world)
 - [ ] multi-agent coexistence (renderer already takes N agents)
 - [ ] tool *crafting* (combine items at a workbench), more abilities
       (dash, dig), PyBullet physics adapter
+
+## Artifacts per run
+
+`runs/<name>/` holds `metrics.jsonl` (per-episode + per-update records),
+`policy_final.npz` / `policy_best.npz` checkpoints, `config_used.json`,
+`demo.gif` (recorded replay), and plotted curves:
+
+```bash
+.venv/bin/python -m aera plot runs/walker_field_open_s0   # → curves_episodes.png, curves_updates.png
+```
+
+`curves_episodes.png`: return, food, mean speed, episode length, exploration.
+`curves_updates.png`: PPO losses (built-in trainer and, from
+`logs/progress.csv`, SB3).
 

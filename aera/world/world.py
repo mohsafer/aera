@@ -121,13 +121,20 @@ class World:
     def move_circle(self, x: float, y: float, dx: float, dy: float,
                     r: float, airborne: bool) -> tuple[float, float]:
         """Axis-separated movement of a circle with push-back against walls
-        and pit cells. Cheap, stable, good enough at this scale."""
-        nx = x + dx
-        if self._circle_free(nx, y, r, airborne):
-            x = nx
-        ny = y + dy
-        if self._circle_free(x, ny, r, airborne):
-            y = ny
+        and pit cells. Cheap, stable, good enough at this scale.
+
+        The displacement is applied in sub-steps of at most r/2 so one large
+        step can never leap clean over a 1 m wall or pit cell (tunneling)."""
+        dist = math.hypot(dx, dy)
+        steps = 1 + int(dist / (0.5 * r))
+        sx, sy = dx / steps, dy / steps
+        for _ in range(steps):
+            nx = x + sx
+            if self._circle_free(nx, y, r, airborne):
+                x = nx
+            ny = y + sy
+            if self._circle_free(x, ny, r, airborne):
+                y = ny
         return x, y
 
     def _circle_free(self, x: float, y: float, r: float, airborne: bool) -> bool:

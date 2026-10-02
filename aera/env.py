@@ -208,7 +208,8 @@ class AeraEnv(gym.Env):
             "ret": self.ep_ret,
             "score": a.foods_eaten * 10,
             "foods": a.foods_eaten,
-            "mean_speed": a.speed_sum / max(1, self.steps),
+            # speed_sum is ∫v dt (metres); divide by simulated seconds → m/s
+            "mean_speed": a.speed_sum / max(1.0, self.steps * self.config.sim.dt),
             "explored": a.exploration_ratio(self.world),
             "inventory": sorted(a.inventory),
             "beacon": bool(self.world.beacon and self.world.beacon.hit),

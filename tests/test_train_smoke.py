@@ -2,6 +2,8 @@
 import json
 import os
 
+import numpy as np
+
 from aera.config import Config
 from aera.training.trainer import Trainer, load_policy
 

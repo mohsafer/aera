@@ -48,7 +48,9 @@ class PPO:
                           minibatch=minibatch, ent_coef=ent_coef,
                           vf_coef=vf_coef, max_grad_norm=max_grad_norm)
         self.norm = RunningNorm(obs_dim)
-        rng = np.random.default_rng(seed)
+        # threaded generator, never the global np.random state (AGENTS.md §2)
+        self.rng = np.random.default_rng(seed)
+        rng = self.rng
 
         def lin(fan_in, fan_out):
             w = rng.normal(0, 1.0 / math.sqrt(fan_in), size=(fan_in, fan_out))
@@ -86,7 +88,7 @@ class PPO:
         if deterministic:
             a = mu
         else:
-            a = mu + np.exp(self.logstd) * np.random.standard_normal(mu.shape)
+            a = mu + np.exp(self.logstd) * self.rng.standard_normal(mu.shape)
         a = np.clip(a, -1.0, 1.0)          # env clips too; keeps logp sane
         logp = self._logp(a[None], mu[None], self.logstd)[0]
         return a.astype(np.float32), float(logp), v
@@ -108,7 +110,7 @@ class PPO:
         stats = {"pi_loss": 0.0, "v_loss": 0.0, "entropy": 0.0, "clipfrac": 0.0}
         batches = 0
         for _ in range(h["epochs"]):
-            np.random.shuffle(idx)
+            self.rng.shuffle(idx)
             for s in range(0, n, h["minibatch"]):
                 b = idx[s:s + h["minibatch"]]
                 grads, st = self._grads(o[b], act[b], logp_old[b], adv[b], ret[b])
@@ -137,7 +139,7 @@ class PPO:
         dlogp_dmu = (a - mu) / std**2
         dlogp_dlogstd = ((a - mu) / std) ** 2 - 1.0
         g_mu = (g[:, None] * dlogp_dmu) / len(o)
-        g_logstd = (g * dlogp_dlogstd).sum(0) / len(o) - h["ent_coef"]
+        g_logstd = (g[:, None] * dlogp_dlogstd).sum(0) / len(o) - h["ent_coef"]
 
         grads: dict[str, np.ndarray] = {}
         grads["Wm"] = z2.T @ g_mu

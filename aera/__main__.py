@@ -11,8 +11,12 @@ def main():
         from .scripts.train import main as m
     elif cmd == "watch":
         from .scripts.watch import main as m
+    elif cmd == "sb3":
+        from .scripts.sb3 import main as m
+    elif cmd == "plot":
+        from .scripts.plot import main as m
     else:
-        print("usage: python -m aera {train|watch} [--help]")
+        print("usage: python -m aera {train|watch|sb3|plot} [--help]")
         raise SystemExit(2)
     m(argv)
 

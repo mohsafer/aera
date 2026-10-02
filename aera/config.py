@@ -137,6 +137,15 @@ class Config:
 
 
 def _merge(cls, base: Any, incoming: dict) -> Any:
-    fields = {f.name: getattr(base, f.name) for f in dataclasses.fields(cls)}
-    fields.update(incoming or {})
+    """Overlay `incoming` onto the dataclass `base`, recursing so that
+    nested sections (world.terrain, world.walls, ...) become dataclasses
+    too — JSON and programmatic dicts must behave identically."""
+    incoming = incoming or {}
+    fields: dict[str, Any] = {}
+    for f in dataclasses.fields(cls):
+        val = getattr(base, f.name)
+        if f.name in incoming:
+            inc = incoming[f.name]
+            val = _merge(type(val), val, inc) if is_dataclass(val) and isinstance(inc, dict) else inc
+        fields[f.name] = val
     return cls(**fields)
