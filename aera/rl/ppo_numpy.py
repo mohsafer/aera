@@ -127,7 +127,9 @@ class PPO:
         std = np.exp(self.logstd)
 
         logp = self._logp(a, mu, self.logstd)
-        ratio = np.exp(logp - logp_old)
+        # exp overflow guard: a large log-ratio (warm-start, sharp policy,
+        # off-policy batch) would make ratio=inf → inf*0=NaN in grad clipping
+        ratio = np.exp(np.clip(logp - logp_old, -30.0, 30.0))
         clipped = (ratio > 1 + h["clip"]) & (adv > 0) | (ratio < 1 - h["clip"]) & (adv < 0)
         g = np.where(clipped, 0.0, -adv * ratio)            # d(surrogate)/dlogp
         stats = {"pi_loss": float((-np.minimum(ratio * adv, np.clip(ratio, 1 - h["clip"], 1 + h["clip"]) * adv)).mean()),
@@ -162,7 +164,10 @@ class PPO:
         grads["b1"] = dz1.sum(0)
         grads["logstd"] = g_logstd
 
-        # global-norm grad clip
+        # global-norm grad clip; a non-finite gradient (overflow upstream)
+        # would poison Adam permanently, so the whole update is dropped instead
+        if not all(np.isfinite(g_).all() for g_ in grads.values()):
+            return {k: np.zeros_like(v) for k, v in grads.items()}, stats
         gn = math.sqrt(sum(float((g_ ** 2).sum()) for g_ in grads.values()))
         if gn > h["max_grad_norm"]:
             for k in grads:

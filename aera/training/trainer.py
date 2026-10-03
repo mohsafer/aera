@@ -18,7 +18,8 @@ from .metrics import JsonlLogger, MilestoneTracker
 class Trainer:
     def __init__(self, config, out_dir: str, total_steps: int = 200_000,
                  rollout: int = 2048, seed: int = 0, viewer=None,
-                 save_every_updates: int = 20, init_from: str | None = None):
+                 save_every_updates: int = 20, init_from: str | None = None,
+                 lr: float | None = None):
         self.config = config
         self.out = out_dir
         self.total_steps = total_steps
@@ -27,8 +28,11 @@ class Trainer:
         self.viewer = viewer
         self.save_every = save_every_updates
         # warm-start weights (+ RunningNorm) from a policy_*.npz. NOT a resume:
-        # the curriculum episode counter and RNG start fresh.
+        # the curriculum episode counter and RNG start fresh. Pair with a
+        # smaller --lr: a converged policy + reset Adam moments + full lr can
+        # destroy the policy (see log.md, warm-start divergence).
         self.init_from = init_from
+        self.lr = lr
 
         os.makedirs(out_dir, exist_ok=True)
         self.logger = JsonlLogger(os.path.join(out_dir, "metrics.jsonl"))
@@ -40,7 +44,7 @@ class Trainer:
         env = AeraEnv(self.config)
         obs_dim_ = obs_dim(self.config.agent)
         act_dim_ = action_dim(self.config.agent.kind)
-        ppo = PPO(obs_dim_, act_dim_, seed=self.seed)
+        ppo = PPO(obs_dim_, act_dim_, seed=self.seed, **({"lr": self.lr} if self.lr else {}))
         if self.init_from:
             ppo.load(self.init_from)
             print(f"warm-started policy from {self.init_from} "

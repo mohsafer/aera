@@ -224,3 +224,34 @@ for work.
 Next: the Explorer decision, true trainer resume, two-agent coexistence
 (D8), tool crafting, and maybe an SB3 walker on `field_curriculum` where the
 walls force real navigation.
+
+---
+
+## 2026-10-02 — warm-start divergence: a NaN war story
+
+Added `train --init` (warm-start weights + obs-norm from a checkpoint) and
+immediately got burned by it: continuing the 600k walker for 400k steps at
+the default lr **collapsed from ret ~47 to −4**, with `pi_loss/v_loss = nan`
+from update 181 onward. The milestones all "re-fired" at episode 14 (the
+rolling window filled while the loaded policy was still good), which makes
+the crash look deceptively gentle in the logs — check the end of the curve,
+not the beginning.
+
+Root cause chain, worth remembering because each link is a classic:
+1. Reset Adam moments + a converged sharp policy (loaded logstd ≈ small) +
+   full lr 3e-4 → the first updates overshoot (`pi_loss +1.18` — a *positive*
+   policy loss means the surrogate ratio exploded).
+2. PPO ratio = exp(logp − logp_old): with a sharp Gaussian, small parameter
+   shifts produce huge log-ratios; eventually `exp` overflows to `inf`.
+3. The surrogate gradient becomes `inf`, and the global-norm clip scales it
+   by `max_norm / inf = 0` → **inf × 0 = NaN** → Adam poisons every weight.
+4. NaN weights → the walker "forgets" walking; episodes end by starvation.
+
+Fixes (all in `rl/ppo_numpy.py` + `train --lr`):
+- clamp the log-ratio to ±30 before `exp`;
+- drop the whole update if any gradient is non-finite (NaN can't be
+  un-poisoned, only refused);
+- expose `--lr`; fine-tuning recipe is `--init <npz> --lr 1e-4`.
+The deeper lesson: from-scratch hyperparameters are not fine-tuning
+hyperparameters. The optimizer-state reset is the third state (after weights
+and obs-norm) that a checkpoint format should carry if it wants true resumes.

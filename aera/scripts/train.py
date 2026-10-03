@@ -30,6 +30,9 @@ def main(argv=None) -> str:
     p.add_argument("--init", default=None, metavar="NPZ",
                    help="warm-start from a policy_*.npz (weights + obs-norm only; "
                         "the curriculum restarts at episode 0)")
+    p.add_argument("--lr", type=float, default=None,
+                   help="PPO learning rate (default 3e-4; use e.g. 1e-4 when "
+                        "fine-tuning with --init)")
     args = p.parse_args(argv)
 
     config = Config.load(args.config)
@@ -48,7 +51,8 @@ def main(argv=None) -> str:
     print(f"AERA training → {out}  (agent={config.agent.kind}, "
           f"world={config.world.name}, steps={args.steps})")
     Trainer(config, out, total_steps=args.steps, rollout=args.rollout,
-            seed=args.seed, viewer=viewer, init_from=args.init).train()
+            seed=args.seed, viewer=viewer, init_from=args.init,
+            lr=args.lr).train()
     return out
 
 

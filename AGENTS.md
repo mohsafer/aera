@@ -244,7 +244,8 @@ the numpy PPO is the readable reference.
 
 - **Implemented & exercised (v0.1, post server session 2026-10-02)**: full
   package above, 28/28 tests, both bodies, tools (boots→jump), beacon,
-  curriculum, milestones, 3D viewer/recorder, plotting, SB3 baseline script.
+  curriculum, milestones, 3D viewer/recorder, plotting, SB3 baseline script,
+  `train --init` warm-start (`--lr` recommended, see log.md NaN war story).
 - **Training results** (see log.md for details): walker 600k on field_open —
   5/6 milestones (Walking@271, no gait tuning needed), ret ~41, 0.75 m/s;
   rover peaks at 1.09 m/s but the constant-lr reference PPO oscillates (use
