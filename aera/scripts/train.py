@@ -27,6 +27,9 @@ def main(argv=None) -> str:
     p.add_argument("--watch", action="store_true",
                    help="open the live 3D viewer during training")
     p.add_argument("--fps", type=int, default=30, help="viewer frame cap")
+    p.add_argument("--init", default=None, metavar="NPZ",
+                   help="warm-start from a policy_*.npz (weights + obs-norm only; "
+                        "the curriculum restarts at episode 0)")
     args = p.parse_args(argv)
 
     config = Config.load(args.config)
@@ -45,7 +48,7 @@ def main(argv=None) -> str:
     print(f"AERA training → {out}  (agent={config.agent.kind}, "
           f"world={config.world.name}, steps={args.steps})")
     Trainer(config, out, total_steps=args.steps, rollout=args.rollout,
-            seed=args.seed, viewer=viewer).train()
+            seed=args.seed, viewer=viewer, init_from=args.init).train()
     return out
 
 

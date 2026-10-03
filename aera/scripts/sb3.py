@@ -47,7 +47,11 @@ def main(argv=None) -> str:
     # CSV logger → logs/progress.csv (losses per update) for `python -m aera plot`
     from stable_baselines3.common.logger import configure
     model.set_logger(configure(os.path.join(out, "logs"), ["csv", "stdout"]))
-    model.learn(total_timesteps=args.steps, progress_bar=False)
+    # periodic checkpoints so an interrupted learn() still leaves a policy behind
+    from stable_baselines3.common.callbacks import CheckpointCallback
+    ckpt = CheckpointCallback(save_freq=50_000, save_path=out, save_replay_buffer=False,
+                              name_prefix="sb3_ckpt")
+    model.learn(total_timesteps=args.steps, progress_bar=False, callback=ckpt)
     model.save(os.path.join(out, "sb3_policy"))
     print(f"saved SB3 policy → {os.path.join(out, 'sb3_policy.zip')}")
     return out
