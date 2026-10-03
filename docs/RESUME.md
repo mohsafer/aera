@@ -12,6 +12,8 @@ exists only on this machine). First server session results are complete.
 | `rover_field_small_s0` | 50k steps | ret 1.1 → ~3.5, drives ~0.7-1.1 m/s; no milestone |
 | `sb3_rover_field_small_s0` | 30k steps | last-10 mean ret **18.0** vs built-in PPO **2.5** at the same budget |
 | `sb3_walker_field_open_s0` | 300k steps (complete) | last-10 mean ret **46.3** — beats the built-in walker's ~41 with **half** the steps; checkpoint `sb3_policy.zip` saved |
+| `walker_field_open_s0_warm400k` | +400k (≈1M total, complete) | warm-start recipe validated (`--init --lr 1e-4`, no NaN after the ratio-overflow fix): ret 34 → **44.2** via foraging consistency (+1 food/ep); speed flat at ~0.71-0.75 m/s — the gait has plateaued at partial coordination; exploration still ~0.13 |
+| `walker_field_open_s0_warm400k_diverged` | (first attempt) | NaN collapse at update 181 — kept as the log.md war-story evidence; root cause + fix in `rl/ppo_numpy.py` |
 
 - The paused first attempt is kept as `runs/walker_field_open_s0_paused254k`
   (deterministic prefix of the final run; the rerun reproduced it exactly —
