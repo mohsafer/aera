@@ -6,10 +6,10 @@
     "seed": 7,
     "terrain": { "mud_patches": 2, "lava_pools": 1, "pits": 1, "road": false },
     "walls": { "border": true, "rects": [[8, 6, 5, 1], [20, 14, 1, 7], [12, 24, 6, 1]] },
-    "entities": { "foods": 8, "food_respawn_ticks": 300, "tools": ["boots"], "beacon": [28, 28] },
-    "anomalies": { "enabled": true, "kinds": ["wind", "fog", "famine", "lava_surge", "terrain_shift", "quake"], "event_prob": 0.004, "intensity": 1.0 }
+    "entities": { "foods": 8, "food_respawn_ticks": 300, "tools": ["boots"], "beacon": [28, 28], "predators": 1, "predator_speed": 1.1, "predator_damage": 6.0 },
+    "anomalies": { "enabled": true, "kinds": ["wind", "fog", "famine", "lava_surge", "terrain_shift", "quake", "alien_drop", "holes"], "event_prob": 0.004, "intensity": 1.0 }
   },
-  "agent": { "kind": "walker", "view_rays": 12, "view_range": 10.0, "cpg": true, "scent": true },
+  "agent": { "kind": "walker", "view_rays": 12, "view_range": 10.0, "cpg": true, "scent": true, "threat_sense": true },
   "sim": { "dt": 0.1, "max_steps": 2000 },
   "reward": { "w_food": 3.0, "w_survive": 0.01, "w_novelty": 0.06, "w_progress": 0.05,
               "w_damage": 0.5, "w_death": 5.0, "w_beacon": 10.0, "beacon_terminates": false },

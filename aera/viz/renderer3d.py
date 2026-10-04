@@ -50,6 +50,8 @@ BEACON = (88, 224, 240)
 SKIN = (222, 192, 152)
 ROVER = (196, 84, 72)
 TIRE = (44, 44, 50)
+ALIEN = (70, 150, 80)
+ALIEN_EYE = (230, 60, 50)
 
 LIGHT = (0.45, -0.5, -0.75)   # direction *to* the light (z-up world)
 NEAR = 0.18
@@ -159,6 +161,8 @@ def _gather_faces(world, agents, eye, camera, t):
             _walker(faces, a, t)
         else:
             _rover(faces, a)
+    for p in getattr(world, "predators", []):
+        _alien(faces, p, t)
     return faces
 
 
@@ -264,6 +268,19 @@ def _rover(faces, a):
     _box(faces, px + f[0] * 0.1 - 0.03, py + f[1] * 0.1 - 0.03, 0.06, 0.06,
          0.44, 0.72, (90, 90, 96), (70, 70, 76))
     _cube(faces, px + f[0] * 0.1, py + f[1] * 0.1, 0.78, 0.12, (40, 220, 120))
+
+
+def _alien(faces, p, t):
+    """Scripted alien: a low hunched body with one pulsing red eye."""
+    h = p.heading
+    f = (math.cos(h), math.sin(h))
+    s = (-math.sin(h), math.cos(h))
+    bob = 0.03 * math.sin(t * 6.0)
+    _obb(faces, p.x, p.y, f, s, 0.30, 0.22, 0.10 + bob, 0.42 + bob,
+         ALIEN, tuple(int(c * 0.75) for c in ALIEN))
+    eye = (p.x + f[0] * 0.18, p.y + f[1] * 0.18, 0.34 + bob)
+    _cube(faces, eye[0], eye[1], eye[2], 0.10,
+          tuple(int(c * (0.7 + 0.3 * abs(math.sin(t * 4.0)))) for c in ALIEN_EYE))
 
 
 # ------------------------------------------------------------------ sky/fog

@@ -106,6 +106,16 @@ class AnomalyDirector:
             world.terrain.carve_blob(self.rng, 2, size=int(0.02 * world.w * world.h) + 8)
             self.active.append(_Effect("terrain_shift", tick + 1, {}))
             return "the terrain shifts underfoot"
+        if kind == "holes":
+            world.terrain.carve_blob(self.rng, 4, size=int(0.012 * world.w * world.h) + 5)
+            self.active.append(_Effect("holes", tick + 1, {}))
+            return "the ground opens — holes everywhere!"
+        if kind == "alien_drop":
+            p = world.spawn_predator(self.rng, 6.0, agent)
+            if p is None:
+                return None
+            self.active.append(_Effect("alien_drop", tick + 1, {}))
+            return "a meteor lands — something crawls out!"
         if kind == "quake":
             self.active.append(_Effect("quake", tick + _QUAKE_DUR,
                                        {"mag": 2.5 * I}))

@@ -32,6 +32,9 @@ class EntitiesCfg:
     food_respawn_ticks: int = 300  # -1 = no respawn
     tools: list = field(default_factory=list)   # e.g. ["boots"]
     beacon: list | None = None                  # [cx, cy] or None
+    predators: int = 0             # scripted aliens (chase + bite)
+    predator_speed: float = 1.1
+    predator_damage: float = 6.0   # hp per bite
 
 
 @dataclass
@@ -40,7 +43,8 @@ class AnomalyCfg:
     so existing configs keep their behaviour; enabled per world via JSON."""
     enabled: bool = False
     kinds: list = field(default_factory=lambda: [
-        "wind", "fog", "famine", "lava_surge", "terrain_shift", "quake"])
+        "wind", "fog", "famine", "lava_surge", "terrain_shift", "quake",
+        "alien_drop", "holes"])
     event_prob: float = 0.0015    # per-step trigger chance (~1 event / 100 s)
     intensity: float = 1.0
 
@@ -71,6 +75,7 @@ class AgentCfg:
     fov_deg: float = 270.0
     cpg: bool = True              # include gait-phase clock in walker obs
     scent: bool = True            # include direction-to-nearest-food in obs
+    threat_sense: bool = False    # predator ray flag + fear block (v0.3 worlds)
 
 
 @dataclass

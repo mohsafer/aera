@@ -44,17 +44,24 @@ def proprio_dim(cfg: AgentCfg) -> int:
     return d
 
 
+def ray_channels(cfg: AgentCfg) -> int:
+    return 7 if cfg.threat_sense else 6
+
+
 def obs_dim(cfg: AgentCfg) -> int:
-    return (cfg.view_rays * 6 + proprio_dim(cfg) + 9 * N_TERRAIN
-            + N_INVENTORY + (3 if cfg.scent else 0) + 3)
+    return (cfg.view_rays * ray_channels(cfg) + proprio_dim(cfg) + 9 * N_TERRAIN
+            + N_INVENTORY + (3 if cfg.scent else 0) + 3
+            + (4 if cfg.threat_sense else 0))
 
 
 def obs_layout(cfg: AgentCfg) -> list[tuple[str, int]]:
-    seg = [("rays", cfg.view_rays * 6), ("proprio", proprio_dim(cfg)),
+    seg = [("rays", cfg.view_rays * ray_channels(cfg)), ("proprio", proprio_dim(cfg)),
            ("terrain3x3", 9 * N_TERRAIN), ("inventory", N_INVENTORY)]
     if cfg.scent:
         seg.append(("scent", 3))
     seg.append(("beacon", 3))
+    if cfg.threat_sense:
+        seg.append(("fear", 4))    # sin/cos/dist to nearest predator + count
     return seg
 
 
@@ -66,7 +73,8 @@ def build_obs(agent, world: World, cfg: AgentCfg) -> np.ndarray:
     fov = math.radians(cfg.fov_deg)
     r0 = agent.heading - fov / 2.0
     step_ang = fov / max(1, cfg.view_rays - 1)
-    entities = _visible_entities(agent, world, cfg)
+    ch = ray_channels(cfg)
+    entities = _visible_entities(agent, world, cfg, include_threats=cfg.threat_sense)
     # fog anomaly: a pre-drawn per-step multiplicative bias on ray distance
     noise = float(getattr(agent, "sensor_noise", 0.0))
     for i in range(cfg.view_rays):
@@ -81,7 +89,9 @@ def build_obs(agent, world: World, cfg: AgentCfg) -> np.ndarray:
         out[o + 3] = 1.0 if ent_type == "food" else 0.0
         out[o + 4] = 1.0 if ent_type == "tool" else 0.0
         out[o + 5] = 1.0 if ent_type == "beacon" else 0.0
-        o += 6
+        if ch == 7:
+            out[o + 6] = 1.0 if ent_type == "predator" else 0.0
+        o += ch
 
     # ---- proprioception ----------------------------------------------------
     out[o] = agent.v / 2.6
@@ -134,12 +144,29 @@ def build_obs(agent, world: World, cfg: AgentCfg) -> np.ndarray:
         out[o] = math.sin(rel)
         out[o + 1] = math.cos(rel)
         out[o + 2] = min(1.0, d / max(world.w, world.h))
+    o += 3
+
+    # ---- fear (nearest predator direction + crowd size) --------------------
+    if cfg.threat_sense:
+        if world.predators:
+            bd, bp = math.inf, None
+            for p in world.predators:
+                d = math.hypot(p.x - agent.x, p.y - agent.y)
+                if d < bd:
+                    bd, bp = d, p
+            rel = math.atan2(bp.y - agent.y, bp.x - agent.x) - agent.heading
+            out[o] = math.sin(rel)
+            out[o + 1] = math.cos(rel)
+            out[o + 2] = min(1.0, bd / cfg.view_range)
+            out[o + 3] = min(1.0, len(world.predators) / 5.0)
     return out
 
 
 # ------------------------------------------------------------------ helpers
-def _visible_entities(agent, world: World, cfg: AgentCfg) -> list:
-    """Foods/tools/beacon within view range and line of sight."""
+def _visible_entities(agent, world: World, cfg: AgentCfg,
+                      include_threats: bool = False) -> list:
+    """Foods/tools/beacon (and predators when threat_sense) within view range
+    and line of sight."""
     ents = []
     for f in world.foods:
         if f.active:
@@ -149,6 +176,9 @@ def _visible_entities(agent, world: World, cfg: AgentCfg) -> list:
             ents.append(("tool", t.x, t.y))
     if world.beacon is not None:
         ents.append(("beacon", world.beacon.x, world.beacon.y))
+    if include_threats:
+        for p in getattr(world, "predators", []):
+            ents.append(("predator", p.x, p.y))
     out = []
     for (kind, ex, ey) in ents:
         d = math.hypot(ex - agent.x, ey - agent.y)

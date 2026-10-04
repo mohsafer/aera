@@ -23,6 +23,20 @@ class Tool:
 
 
 @dataclass
+class Predator:
+    """Scripted threat (alien): wanders, chases the nearest target within
+    aggro range, bites on contact then stuns itself briefly — escape is
+    always possible. Updated by World.update_predators, NOT by RL."""
+    x: float
+    y: float
+    heading: float = 0.0
+    speed: float = 1.1
+    aggro_range: float = 6.0
+    stun_until: int = -1
+    wander_until: int = 0
+
+
+@dataclass
 class Beacon:
     x: float
     y: float

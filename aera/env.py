@@ -101,6 +101,8 @@ class AeraEnv(gym.Env):
         integrate(agent, world, cfg.sim.dt)
         agent.speed_sum += agent.v * cfg.sim.dt
         world.step_time()
+        if world.predators:
+            world.update_predators(cfg.sim.dt, [agent], world.tick)
         agent.steps_alive += 1
         self.steps += 1
 
@@ -177,6 +179,17 @@ class AeraEnv(gym.Env):
                 w.beacon.hit = True
                 sub["beacon"] = rw.w_beacon
                 events.append("reached the beacon!")
+
+        # predators (scripted aliens): contact bite → damage + their own stun
+        for p in w.predators:
+            if w.tick < p.stun_until:
+                continue
+            if math.hypot(p.x - a.x, p.y - a.y) < 0.7:
+                bite = cfg.world.entities.predator_damage
+                a.health = max(0.0, a.health - bite)
+                sub["damage"] -= rw.w_damage * bite
+                p.stun_until = w.tick + 30
+                events.append("bitten by an alien!")
 
         # survival + progress shaping
         sub["survive"] = rw.w_survive * dt

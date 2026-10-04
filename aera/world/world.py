@@ -12,7 +12,7 @@ import math
 import numpy as np
 
 from ..config import WorldCfg
-from .entities import Beacon, Food, Tool, place_free
+from .entities import Beacon, Food, Predator, Tool, place_free
 from .terrain import Terrain, TerrainGrid
 
 
@@ -44,6 +44,7 @@ class World:
 
         self.foods: list[Food] = []
         self.tools: list[Tool] = []
+        self.predators: list[Predator] = []
         self.beacon: Beacon | None = None
         self.wind = (0.0, 0.0)   # drift (m/s) applied by integrate; anomalies
         self._spawn_entities()
@@ -59,9 +60,56 @@ class World:
             spots = place_free(1, self, self.rng, min_spawn_dist=0.0)
             if spots:
                 self.tools.append(Tool(x=spots[0][0], y=spots[0][1], kind=kind))
+        for _ in range(e.predators):
+            spots = place_free(1, self, self.rng, min_spawn_dist=4.0)
+            if spots:
+                self.predators.append(Predator(x=spots[0][0], y=spots[0][1],
+                                               speed=e.predator_speed))
         if e.beacon is not None:
             bx, by = e.beacon
             self.beacon = Beacon(x=float(bx) + 0.5, y=float(by) + 0.5)
+
+    def spawn_predator(self, rng, min_agent_dist: float, agent) -> Predator | None:
+        """Anomaly arrival: drop a predator on a free cell at least
+        `min_agent_dist` away from the agent (never materialize on top)."""
+        for _ in range(40):
+            cx = int(rng.integers(1, self.w - 1))
+            cy = int(rng.integers(1, self.h - 1))
+            if not self.cell_ok(cx, cy):
+                continue
+            x, y = cx + 0.5, cy + 0.5
+            if agent is not None and math.hypot(x - agent.x, y - agent.y) < min_agent_dist:
+                continue
+            p = Predator(x=x, y=y, speed=self.cfg.entities.predator_speed)
+            self.predators.append(p)
+            return p
+        return None
+
+    def update_predators(self, dt: float, targets: list, tick: int) -> None:
+        """Scripted chase AI: pursue the nearest target in aggro range,
+        otherwise random-walk. Uses world.rng → deterministic per seed."""
+        for p in self.predators:
+            if tick < p.stun_until:
+                continue
+            tx, ty, td = None, None, math.inf
+            for a in targets:
+                d = math.hypot(a.x - p.x, a.y - p.y)
+                if d < td:
+                    tx, ty, td = a.x, a.y, d
+            if tx is not None and td < p.aggro_range:
+                p.heading = math.atan2(ty - p.y, tx - p.x)
+                step = p.speed * dt
+            else:
+                if tick >= p.wander_until:
+                    p.heading = float(self.rng.uniform(0, 2 * math.pi))
+                    p.wander_until = tick + int(self.rng.integers(10, 40))
+                step = 0.4 * p.speed * dt
+            nx = p.x + math.cos(p.heading) * step
+            ny = p.y + math.sin(p.heading) * step
+            if self._circle_free(nx, p.y, 0.3, False):
+                p.x = nx
+            if self._circle_free(p.x, ny, 0.3, False):
+                p.y = ny
 
     def reset_episode(self) -> None:
         """Per-episode reset: foods come back, tools return to pedestals,
@@ -69,6 +117,8 @@ class World:
         self.tick = 0
         self.wind = (0.0, 0.0)
         self.terrain.restore()
+        # keep the configured predator population, drop anomaly arrivals
+        self.predators = self.predators[:self.cfg.entities.predators]
         for f in self.foods:
             f.active = True
             f.respawn_at = -1

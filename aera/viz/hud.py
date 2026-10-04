@@ -66,6 +66,8 @@ def draw_minimap(surf, world, agent, rect, font):
     for tool in world.tools:
         if not tool.taken:
             pygame.draw.circle(surf, WARN, (rect.x + tool.x * sx, rect.y + tool.y * sy), 3)
+    for p in getattr(world, "predators", []):
+        pygame.draw.circle(surf, BAD, (rect.x + p.x * sx, rect.y + p.y * sy), 3)
     if world.beacon is not None:
         pygame.draw.circle(surf, (88, 224, 240), (rect.x + world.beacon.x * sx,
                                                   rect.y + world.beacon.y * sy), 3)
