@@ -116,6 +116,8 @@ class Trainer:
             stats = ppo.update(np.array(buf["obs"]), np.array(buf["act"]),
                                np.array(buf["logp"]), adv, ret)
             update += 1
+            if self.viewer is not None and hasattr(self.viewer, "push_update"):
+                self.viewer.push_update(global_step, stats)
             self.logger.log({"type": "update", "update": update,
                              "step": global_step, **stats,
                              "eps_per_sec": self._eps_rate(t0, global_step)})
@@ -155,7 +157,10 @@ class Trainer:
         self.episodes.append(ep)
         self.logger.log({"type": "episode", **ep})
         if self.viewer is not None:
-            self.viewer.chart.push(ep["ret"])
+            if hasattr(self.viewer, "push_episode"):
+                self.viewer.push_episode(ep)      # stream viewer
+            elif hasattr(self.viewer, "chart"):
+                self.viewer.chart.push(ep["ret"])  # pygame viewer
         for name in self.milestones.update(ep):
             print(f"\n★ SKILL UNLOCKED: {name} (episode {ep['episode']})\n", flush=True)
             self.logger.log({"type": "milestone", "skill": name,
