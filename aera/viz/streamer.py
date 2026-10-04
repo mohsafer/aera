@@ -20,6 +20,7 @@ import numpy as np
 
 from .camera import Camera
 from .renderer3d import render_frame
+from ..minds.base import build_summary
 
 _PAGE = """<!doctype html><html><head><title>AERA live</title>
 <meta charset="utf-8"><style>
@@ -226,13 +227,23 @@ class StreamViewer:
     def push_episode(self, ep: dict) -> None:
         self.streamer.push_episode(ep)
 
-    def play(self, env, policy=None, seed: int = 0):
+    def play(self, env, policy=None, seed: int = 0, mind=None, mind_interval: int = 25):
         """Standalone playback loop (the --stream equivalent of Viewer.play)."""
         obs, _ = env.reset(seed=seed)
+        n = 0
+        line = None
         while not self.quit_requested:
+            if mind is not None and n % mind_interval == 0:
+                t = mind.decide(build_summary(env))
+                env.agent.goal = t.goal
+                line = f"★ THOUGHT: {t.goal} — {t.rationale}"
             a = (policy.act(obs, deterministic=True)[0]
                  if policy is not None else env.action_space.sample())
             obs, _, term, trunc, _ = env.step(a)
+            n += 1
+            if line is not None:
+                env.last_events.append(line)   # after step: step() replaced the list
+                line = None
             self.tick(env)
             if term or trunc:
                 obs, _ = env.reset()

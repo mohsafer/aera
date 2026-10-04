@@ -374,3 +374,33 @@ an early checkpoint and a late checkpoint, frames aligned side by side into
 one GIF; (c) the existing curve sheets per run; (d) mind-audit panels once
 minds exist. All rendered through the same headless renderer, so the
 benchmark script outputs a browsable folder for the SSH-tunnel workflow.
+
+---
+
+## 2026-10-02 — minds implemented: the agent now thinks (a little)
+
+The design from the v0.3 entry is built. `aera/minds/` — a `Mind` receives a
+numeric world summary (energy, health, threat/tool/food/beacon distances,
+inventory, recent events) and returns a `Thought(goal, rationale)` every
+`--mind-interval` steps (default 25 = 2.5 sim-seconds). `RuleMind` encodes
+survival priorities in ~15 lines (flee > shelter > forage > craft > navigate
+> explore) and is fully deterministic — it is the baseline the LLM must beat.
+`LLMMind` posts the same summary to any OpenAI-compatible chat endpoint
+(`AERA_LLM_URL`, temperature 0, stdlib urllib — no new dependencies) and
+degrades to "explore" when the endpoint is down.
+
+The goal reaches the policy through a one-hot `goal` slot in the observation
+(`agent.mind_goal: true` in config — same opt-in pattern as scent/cpg), so
+the policy learns what each goal *means* while the mind decides which one
+applies. Thoughts surface in three places: the event feed ("★ THOUGHT: forage
+— starving"), the HUD vitals panel, and `metrics.jsonl` as `type: thought`
+records carrying the full summary — that's the raw material for the mind
+audit (behavior per goal, and the ON/OFF/shuffled A/B).
+
+Bug worth remembering: appending the thought to `env.last_events` BEFORE
+`env.step` is useless — step() *replaces* the list. Think before acting,
+publish after stepping. Two play loops and the trainer all needed the same
+treatment. What the demo shows today: a random-policy walker with a RuleMind
+(ports 8888 training / 8889 mind demo). What it doesn't show yet: the goals
+*helping* — a random policy can't execute "flee". The honest test is a
+goal-conditioned policy trained WITH the mind — next increment.

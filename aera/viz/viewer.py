@@ -65,6 +65,7 @@ class Viewer:
         obs, _ = env.reset(seed=seed)
         running = True
         n = 0
+        line = None
         while running and not self.quit_requested:
             self.clock.tick(60)
             self._acc += self.clock.get_time() / 1000.0
@@ -76,11 +77,14 @@ class Viewer:
                     from ..minds.base import build_summary
                     t = mind.decide(build_summary(env))
                     env.agent.goal = t.goal
-                    env.last_events.append(f"★ THOUGHT: {t.goal} — {t.rationale}")
+                    line = f"★ THOUGHT: {t.goal} — {t.rationale}"
                 a = (policy.act(obs, deterministic=True)[0]
                      if policy is not None else env.action_space.sample())
                 obs, _, term, trunc, info = env.step(a)
                 n += 1
+                if line is not None:
+                    env.last_events.append(line)   # after step: step() replaced it
+                    line = None
                 for ev in info["events"]:
                     self.events.append(f"[ep {env.episode}] {ev}")
                 if term or trunc:
