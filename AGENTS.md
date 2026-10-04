@@ -151,10 +151,12 @@ override you must re-set the value explicitly in the next stage.
 
 **Milestones** (`training/metrics.py::MilestoneTracker`): rolling 15-episode
 rules → Walking / Forager / Survivor / Explorer / ToolUser / Navigator;
-printed as `★ SKILL UNLOCKED` and logged to metrics.jsonl. Known calibration
-note: Explorer (≥0.5 of passable cells in an episode) is unreachable in a
-32×32 world with 2000-step episodes at walker speeds — see log.md; either
-re-scale the rule or treat it as a stretch goal.
+printed as `★ SKILL UNLOCKED` and logged to metrics.jsonl. Explorer is
+speed-normalized: `explored_norm = explored / min(1, MAX_SPEED × seconds /
+passable_cells)` (≈1 novel cell per metre at cruise speed), threshold 0.15 —
+one rule across bodies and world sizes, immune to camping (a camper's
+reachable area is computed at body cruise speed, not its own). Raw
+`explored` stays in the episode record for plotting.
 
 ## 7. Running things
 
@@ -248,12 +250,14 @@ the numpy PPO is the readable reference.
   `train --init` warm-start (`--lr` recommended, see log.md NaN war story).
 - **Training results** (see log.md for details): walker 600k on field_open —
   5/6 milestones (Walking@271, no gait tuning needed), ret ~41, 0.75 m/s;
-  rover peaks at 1.09 m/s but the constant-lr reference PPO oscillates (use
-  SB3 for the rover Walking milestone); exploration plateaus at ~0.12/episode
-  (Explorer milestone unreachable at this scale).
+  +400k warm-start continuation (≈1M total): ret ~44 via foraging consistency,
+  speed flat (gait plateaued at ~0.4 coordination). Rover peaks at 1.09 m/s
+  but the constant-lr reference PPO oscillates (use SB3 for the rover Walking
+  milestone). Explorer re-scaled to speed-normalized form (0.15 of
+  cruise-reachable) → all 6 milestones attainable; raw exploration plateaus
+  at ~0.13/episode.
 - **Simplifications (deliberate, see log.md D2/D8)**: locomotion is
   procedural (not articulated-body physics); single agent per env; tool
   *crafting* is designed-for but not implemented; novelty is cell-count.
 - **Next candidates**: two-agent coexistence, tool crafting, trainer resume
-  (true resume incl. curriculum/RNG state, not just warm-start), Explorer
-  re-calibration decision.
+  (true resume incl. curriculum/RNG state, not just warm-start).

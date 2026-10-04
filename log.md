@@ -255,3 +255,27 @@ Fixes (all in `rl/ppo_numpy.py` + `train --lr`):
 The deeper lesson: from-scratch hyperparameters are not fine-tuning
 hyperparameters. The optimizer-state reset is the third state (after weights
 and obs-norm) that a checkpoint format should carry if it wants true resumes.
+
+---
+
+## 2026-10-02 — Explorer milestone redesigned (decision: re-scale + speed-normalize)
+
+The last open calibration question is settled. Old rule: rolling
+`explored ≥ 0.5` of passable cells per episode — structurally impossible
+here (a perfect 0.75 m/s walker covers ≤ ~0.17 of a 32×32 world in 2000
+steps; measured plateau 0.12-0.13). New rule, per decision:
+
+    explored_norm = explored / min(1, MAX_SPEED × episode_seconds / passable)
+    Explorer ⟺ rolling explored_norm ≥ 0.15
+
+i.e. "visit 15% of the cells your *body class* could reach at cruise speed"
+(≈1 novel cell per metre of travel, `MAX_SPEED` from physics, not the
+agent's own speed — self-referential normalization would reward camping).
+Validated by replaying existing runs through the new tracker: the 600k
+walker fires Explorer@14 (norm ≈ 0.33), the warm-start continuation fires
+all 6/6, and the rover gets a fair exploration bar for the first time
+(fires@34 on its 200k run). A camper scores ~0.05-0.1 and stays locked out.
+Raw `explored` stays in the record; the plot prefers `explored_norm` when
+present so old runs still graph. Lesson: when a metric is structurally
+unreachable, it isn't measuring skill — re-derive what the number *should*
+mean before moving the threshold.

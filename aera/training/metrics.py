@@ -30,7 +30,9 @@ class MilestoneTracker:
         "Walking":  lambda s, kind: s["mean_speed"] >= (1.2 if kind == "rover" else 0.7),
         "Forager":  lambda s, kind: s["foods"] >= 4,
         "Survivor": lambda s, kind: s["steps"] >= 900,
-        "Explorer": lambda s, kind: s["explored"] >= 0.5,
+        # explored_norm: fraction of cruise-speed-reachable cells visited
+        # (see env._episode_stats) — body-agnostic; raw explored stays logged
+        "Explorer": lambda s, kind: s["explored_norm"] >= 0.15,
         "ToolUser": lambda s, kind: "boots" in s["inventory"] and "jumped" in s["events"],
         "Navigator": lambda s, kind: s["beacon"],
     }
@@ -49,6 +51,7 @@ class MilestoneTracker:
             "foods": sum(e["foods"] for e in self.history) / len(self.history),
             "steps": sorted(e["steps"] for e in self.history)[len(self.history) // 2],
             "explored": sum(e["explored"] for e in self.history) / len(self.history),
+            "explored_norm": sum(e.get("explored_norm", 0.0) for e in self.history) / len(self.history),
             "inventory": self.history[-1]["inventory"],
             "events": [ev for e in self.history for ev in e["events"]],
             "beacon": any(e["beacon"] for e in self.history),

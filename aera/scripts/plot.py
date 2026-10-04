@@ -97,6 +97,11 @@ def plot_run(run_dir: str, window: int = 15) -> list[str]:
         raise SystemExit(f"no metrics.jsonl or monitor.csv in {run_dir}")
     if not episodes:
         raise SystemExit(f"no episode records yet in {run_dir}")
+    # prefer the speed-normalized exploration when the records carry it
+    if any("explored_norm" in e for e in episodes):
+        explored_key, explored_label = "explored_norm", "exploration (vs cruise-speed-reachable)"
+    else:
+        explored_key, explored_label = "explored", "exploration (fraction of passable cells)"
 
     written: list[str] = []
 
@@ -107,7 +112,7 @@ def plot_run(run_dir: str, window: int = 15) -> list[str]:
         ("food per episode", [e.get("foods") for e in episodes]),
         ("mean speed (m/s)", [e.get("mean_speed") for e in episodes]),
         ("episode length", [e.get("steps") for e in episodes]),
-        ("exploration (fraction of passable cells)", [e.get("explored") for e in episodes]),
+        (explored_label, [e.get(explored_key) for e in episodes]),
         ("tool held (boots)",
          [(float(bool(e["inventory"])) if "inventory" in e else None) for e in episodes]),
     ]

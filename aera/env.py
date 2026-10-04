@@ -202,6 +202,13 @@ class AeraEnv(gym.Env):
 
     def _episode_stats(self) -> dict:
         a = self.agent
+        explored = a.exploration_ratio(self.world)
+        # speed-normalized exploration: fraction of the cells the BODY could
+        # reach at cruise speed (≈1 novel cell per metre) actually visited —
+        # lets one Explorer threshold work across bodies and world sizes
+        seconds = max(1.0, self.steps * self.config.sim.dt)
+        reachable = min(1.0, a.physics.MAX_SPEED * seconds / self.world.passable_cells())
+        explored_norm = explored / reachable if reachable > 0 else 0.0
         return {
             "episode": self.episode,
             "steps": self.steps,
@@ -210,7 +217,8 @@ class AeraEnv(gym.Env):
             "foods": a.foods_eaten,
             # speed_sum is ∫v dt (metres); divide by simulated seconds → m/s
             "mean_speed": a.speed_sum / max(1.0, self.steps * self.config.sim.dt),
-            "explored": a.exploration_ratio(self.world),
+            "explored": explored,
+            "explored_norm": explored_norm,
             "inventory": sorted(a.inventory),
             "beacon": bool(self.world.beacon and self.world.beacon.hit),
             "events": list(self.ep_events),
