@@ -1,7 +1,8 @@
-# Server session state — 2026-10-02 (paused / stopped at user request)
+# Server session state — 2026-10-02 (v0.2 complete)
 
-All training stopped; every checkpoint is on disk under `runs/` (gitignored,
-exists only on this machine). First server session results are complete.
+All work committed through `09d1f83` (local; `origin/main` is behind — push
+when ready). Tests: **36/36**. Full record below; hands-on manual:
+`docs/USER_GUIDE.md`.
 
 ## Headline results (all under `runs/`)
 
@@ -38,14 +39,12 @@ plot <run_dir>`, README hero + artifacts section, `.gitignore` (runs/, .venv/).
 
 ## Suggested next steps
 
-1. Commit the tree (3 commits: fixes / sb3+plot features / docs). Then add
-   `AGENTS.md` + `log.md` to the repo, updating §7 with the new `sb3`/`plot`
-   verbs and §10 with the run results.
-2. Rover to milestone: train `field_small` rover ~200k (Walking needs rolling
-   ≥1.2 m/s; it was at ~0.7 at 50k) or move the rover to `field_open`.
-3. Decide the Explorer question above.
-4. Longer-term (design log): two-agent coexistence, tool crafting, SB3 walker
-   comparison run (SB3 was only run on the rover smoke world).
+1. `git push` — 6 local commits ahead of `origin/main` (user's earlier
+   commits were pushed; the session's are not).
+2. Train on the stress world: `python -m aera train --config
+   configs/field_anomalies.json --steps 600000` and compare curves against
+   `runs/walker_field_open_s0` (robustness evidence for the log).
+3. Longer-term: two-agent coexistence, tool crafting.
 
 ## Viewing from a laptop
 
