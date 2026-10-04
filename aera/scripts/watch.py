@@ -25,6 +25,9 @@ def main(argv=None):
                    choices=("orbit", "chase", "top", "fp"))
     p.add_argument("--record", default=None, metavar="GIF",
                    help="render headless to a GIF instead of opening a window")
+    p.add_argument("--stream", type=int, default=None, metavar="PORT",
+                   help="serve a live browser view (MJPEG) on 127.0.0.1:PORT "
+                        "instead of opening a window")
     p.add_argument("--frames", type=int, default=300)
     args = p.parse_args(argv)
 
@@ -45,6 +48,13 @@ def main(argv=None):
                           mode=args.camera, seed=args.seed)
         print(f"wrote {path}")
         return path
+
+    if args.stream:
+        from ..viz.streamer import StreamViewer
+        print(f"live view → http://localhost:{args.stream}/ "
+              f"(via ssh -L {args.stream}:localhost:{args.stream} user@host)")
+        StreamViewer(port=args.stream).play(env, policy, seed=args.seed)
+        return None
 
     from ..viz.viewer import Viewer
     Viewer().play(env, policy, seed=args.seed)

@@ -26,6 +26,9 @@ def main(argv=None) -> str:
     p.add_argument("--seed", type=int, default=0)
     p.add_argument("--watch", action="store_true",
                    help="open the live 3D viewer during training")
+    p.add_argument("--stream", type=int, default=None, metavar="PORT",
+                   help="serve a live browser view (MJPEG) on 127.0.0.1:PORT "
+                        "during training — watch via your SSH tunnel")
     p.add_argument("--fps", type=int, default=30, help="viewer frame cap")
     p.add_argument("--init", default=None, metavar="NPZ",
                    help="warm-start from a policy_*.npz (weights + obs-norm only; "
@@ -50,6 +53,9 @@ def main(argv=None) -> str:
     if args.watch:
         from ..viz.viewer import Viewer
         viewer = Viewer(fps=args.fps)
+    elif args.stream:
+        from ..viz.streamer import StreamViewer
+        viewer = StreamViewer(port=args.stream)
 
     print(f"AERA training → {out}  (agent={config.agent.kind}, "
           f"world={config.world.name}, steps={args.steps})")
