@@ -69,9 +69,15 @@ Agents: **rover** (differential drive — learn to steer) and **walker**
 (4 joint targets whose *coordination* produces thrust — literally learn to
 walk; watch the gait meter climb from flailing to stepping).
 
+Once a policy works, stress it with **anomalies** — seeded storms, fog,
+famines, lava surges, terrain shifts and earthquakes
+(`configs/field_anomalies.json`): the rewards and sensors stay the same, so
+the agent has to *cope*.
+
 Episodes end by starving, burning, timeout, or the beacon. Curriculum stages
 in the config ramp hunger and danger as episodes accumulate, and every
-episode logs to `runs/<name>/metrics.jsonl`.
+episode logs to `runs/<name>/metrics.jsonl`. The hands-on manual is
+[docs/USER_GUIDE.md](docs/USER_GUIDE.md).
 
 ## Status & roadmap
 

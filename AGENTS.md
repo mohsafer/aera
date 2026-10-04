@@ -55,7 +55,12 @@ aera/
                        curriculum, events, episode stats, render()
   world/
     terrain.py         Terrain enum (GRASS/ROAD/MUD/LAVA/PIT), grid gen
-                       (blobs, pit strips, road), FRICTION table
+                       (blobs, pit strips, road), FRICTION table, pristine
+                       snapshot + restore() (anomaly scars heal on reset)
+    anomalies.py       AnomalyDirector: seeded episodic stress events
+                       (wind/fog/famine/lava_surge/terrain_shift/quake) —
+                       touches terrain cells, food activity, world.wind,
+                       agent kicks, agent.sensor_noise; rewards untouched
     entities.py        Food / Tool / Beacon dataclasses, place_free scatter
     world.py           World: walls (AABB rects incl. border), collision
                        (move_circle — sub-stepped, axis-separated), raycast
@@ -92,7 +97,8 @@ aera/
                        Monitor CSV + logger CSV + 50k-step checkpoints)
     plot.py            CLI  → python -m aera plot <run_dir> → curve PNGs
 configs/               field_small (tests/smoke), field_open (canonical),
-                       field_curriculum (walls+pits+tools, 40×40)
+                       field_curriculum (walls+pits+tools, 40×40),
+                       field_anomalies (field_open + all stress events)
 tests/                 pytest suite (world, physics, env, ppo, renderer, e2e)
 ```
 
@@ -149,6 +155,14 @@ applied cumulatively on every reset; `set` writes attributes by name onto
 RewardCfg/AgentCfg (e.g. `hunger_rate`, `lava_damage`). To "undo" a stage's
 override you must re-set the value explicitly in the next stage.
 
+**Anomalies** (`world/anomalies.py`, off by default, `world.anomalies` in
+config): episodic stress events from a threaded director rng — wind (world
+wind drift in integrate), fog (per-step multiplicative bias on ray dist via
+agent.sensor_noise), famine (food hidden, staggered return), lava_surge /
+terrain_shift (carve_blob scarring; reset heals via terrain.restore()),
+quake (v/heading kicks). Rewards and obs layout unchanged. See
+docs/USER_GUIDE.md §3.
+
 **Milestones** (`training/metrics.py::MilestoneTracker`): rolling 15-episode
 rules → Walking / Forager / Survivor / Explorer / ToolUser / Navigator;
 printed as `★ SKILL UNLOCKED` and logged to metrics.jsonl. Explorer is
@@ -175,7 +189,9 @@ curl -sS https://bootstrap.pypa.io/get-pip.py -o /tmp/get-pip.py
 .venv/bin/python -m aera train --config configs/field_open.json --agent rover --steps 300000
 .venv/bin/python -m aera train --config configs/field_open.json --watch          # live 3D
 .venv/bin/python -m aera train --init runs/walker_field_open_s0/policy_final.npz \
-    --steps 400000                     # warm-start (curriculum restarts at ep 0)
+    --steps 400000                     # warm-start (--lr recommended, see log.md)
+.venv/bin/python -m aera train --steps 1000000 \
+    --resume runs/walker_field_open_s0 # true resume: optimizer + curriculum + RNG
 .venv/bin/python -m aera watch --ckpt runs/rover_field_open_s0/policy_best.npz
 .venv/bin/python -m aera watch --ckpt ... --record demo.gif                      # headless
 .venv/bin/python -m aera plot runs/walker_field_open_s0                          # curve PNGs
@@ -183,9 +199,9 @@ curl -sS https://bootstrap.pypa.io/get-pip.py -o /tmp/get-pip.py
 ```
 
 Run artifacts in `runs/<name>/`: `metrics.jsonl` (per-episode + per-update),
-`policy_final.npz`, `policy_best.npz`, `config_used.json`, `demo.gif`,
-`curves_episodes.png`, `curves_updates.png` (SB3 runs additionally:
-`monitor.csv`, `logs/progress.csv`, `sb3_ckpt_*.zip`).
+`policy_final.npz`, `policy_best.npz`, `trainer_state.npz` (for `--resume`),
+`config_used.json`, `demo.gif`, `curves_episodes.png`, `curves_updates.png`
+(SB3 runs additionally: `monitor.csv`, `logs/progress.csv`, `sb3_ckpt_*.zip`).
 
 ### Headless servers
 
@@ -244,10 +260,12 @@ the numpy PPO is the readable reference.
 
 ## 10. Current status & known simplifications
 
-- **Implemented & exercised (v0.1, post server session 2026-10-02)**: full
-  package above, 28/28 tests, both bodies, tools (boots→jump), beacon,
-  curriculum, milestones, 3D viewer/recorder, plotting, SB3 baseline script,
-  `train --init` warm-start (`--lr` recommended, see log.md NaN war story).
+- **Implemented & exercised (v0.2, post server session 2026-10-02)**: full
+  package above, 36/36 tests, both bodies, tools (boots→jump), beacon,
+  curriculum, milestones (Explorer speed-normalized), world anomalies, 3D
+  viewer/recorder, plotting, SB3 baseline script, `train --init` warm-start
+  and `train --resume` true continuation. Hands-on manual:
+  docs/USER_GUIDE.md.
 - **Training results** (see log.md for details): walker 600k on field_open —
   5/6 milestones (Walking@271, no gait tuning needed), ret ~41, 0.75 m/s;
   +400k warm-start continuation (≈1M total): ret ~44 via foraging consistency,
@@ -259,5 +277,4 @@ the numpy PPO is the readable reference.
 - **Simplifications (deliberate, see log.md D2/D8)**: locomotion is
   procedural (not articulated-body physics); single agent per env; tool
   *crafting* is designed-for but not implemented; novelty is cell-count.
-- **Next candidates**: two-agent coexistence, tool crafting, trainer resume
-  (true resume incl. curriculum/RNG state, not just warm-start).
+- **Next candidates**: two-agent coexistence, tool crafting.

@@ -279,3 +279,43 @@ Raw `explored` stays in the record; the plot prefers `explored_norm` when
 present so old runs still graph. Lesson: when a metric is structurally
 unreachable, it isn't measuring skill — re-derive what the number *should*
 mean before moving the threshold.
+
+---
+
+## 2026-10-02 — v0.2: true resume + world anomalies
+
+Two features, both pushed by real pain:
+
+**True trainer resume** (`train --resume <rundir>`). Warm-start (v0.1.1)
+reset the optimizer — which caused the NaN divergence — and restarted the
+curriculum. A real resume needs FOUR states, not one: weights, optimizer
+moments, the curriculum's episode counter, and the RNG threads (sampler +
+env spawn rng). All of it now lives in `trainer_state.npz`, written every
+checkpoint. Design choices worth remembering: (a) RNG states serialize as
+JSON strings inside the npz — numpy generator state holds 128-bit ints that
+don't fit numpy dtypes; (b) `state_dict()` must COPY arrays — RunningNorm
+mutates its mean in place, so a shared-reference snapshot silently rots;
+(c) on resume, `env.reset()` must be called WITHOUT a seed or the seed
+clobbers the restored spawn RNG; (d) a resume continues at an episode
+boundary, so it's a faithful restart, not a bit-exact tape replay — the
+rollout buffer boundary shifts.
+
+**World anomalies** (`world.anomalies` in config, off by default; see
+`configs/field_anomalies.json`). The stress-test layer: wind (a gusting
+world.wind drift applied in integrate), fog (a pre-drawn per-step
+multiplicative bias on the ray-distance channel), famine (all food hidden,
+trickles back on a stagger), lava surges (carve a fresh lava blob — the
+terrain SCARS until reset; TerrainGrid now keeps a pristine copy and heals
+on reset_episode), terrain shifts (mud blobs re-carved), earthquakes (30
+ticks of shoving). Design rules that kept it cheap: anomalies may only
+touch channels that already exist (cells, food flags, one wind vector, one
+noise scalar, agent v/heading); all randomness flows through the director's
+own threaded rng (seeded world.seed+2), never the env's spawn rng or global
+state; rewards and the obs layout stay untouched, so SB3 runs unmodified.
+The agent can't SEE the anomaly flag — it must infer the storm from its
+sliding feet. That's the point: robustness, not extra inputs.
+
+Both features validated the boring way: new unit tests (36 total now) plus a
+3k-step training smoke on `field_anomalies` (events fired, sustained,
+expired, nothing NaN'd). A comprehensive user guide now lives at
+docs/USER_GUIDE.md.
