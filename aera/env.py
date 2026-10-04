@@ -19,6 +19,7 @@ from .agents.agent import Agent
 from .agents.senses import action_dim, build_obs, obs_dim
 from .config import Config
 from .gym_compat import HAS_GYM, gym, spaces
+from .world.anomalies import AnomalyDirector
 from .world.entities import place_free
 from .world.physics import integrate
 from .world.terrain import Terrain
@@ -42,6 +43,11 @@ class AeraEnv(gym.Env):
         self.world = World(config.world)
         self.rng = np.random.default_rng(config.world.seed + 1)
         self.agent = Agent(config.agent, *self._spawn_point())
+        # episodic stress events (storm/fog/famine/lava/shift/quake), off by
+        # default; own rng → deterministic per config+seed, env rng untouched
+        self.director = (AnomalyDirector(config.world.anomalies,
+                                         np.random.default_rng(config.world.seed + 2))
+                         if config.world.anomalies.enabled else None)
 
         self.episode = 0
         self.steps = 0
@@ -63,6 +69,8 @@ class AeraEnv(gym.Env):
         if seed is not None:
             self.rng = np.random.default_rng(seed)
         self.world.reset_episode()
+        if self.director is not None:
+            self.director.reset()
         x, y = self._spawn_point()
         heading = float(self.rng.uniform(0, 2 * math.pi))
         self.agent.reset(x, y, heading)
@@ -81,6 +89,13 @@ class AeraEnv(gym.Env):
         agent, world, cfg = self.agent, self.world, self.config
         action = np.asarray(action, dtype=np.float32).reshape(-1)
         events: list[str] = []
+
+        # anomalies first: wind/kicks/noise apply to THIS tick's physics+obs
+        if self.director is not None:
+            events.extend(self.director.step(world, agent, world.tick))
+            agent.sensor_noise = self.director.obs_noise
+        else:
+            agent.sensor_noise = 0.0
 
         agent.physics.step(agent, action, world, cfg.sim.dt)
         integrate(agent, world, cfg.sim.dt)

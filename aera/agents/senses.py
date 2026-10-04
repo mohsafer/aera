@@ -67,13 +67,15 @@ def build_obs(agent, world: World, cfg: AgentCfg) -> np.ndarray:
     r0 = agent.heading - fov / 2.0
     step_ang = fov / max(1, cfg.view_rays - 1)
     entities = _visible_entities(agent, world, cfg)
+    # fog anomaly: a pre-drawn per-step multiplicative bias on ray distance
+    noise = float(getattr(agent, "sensor_noise", 0.0))
     for i in range(cfg.view_rays):
         ang = r0 + i * step_ang if cfg.view_rays > 1 else agent.heading
         d_wall = world.raycast(agent.x, agent.y, ang, cfg.view_range)
         d_lava = _lava_distance(agent, world, ang, d_wall)
         d_ent, ent_type = _entity_on_ray(agent, entities, ang, step_ang, d_wall)
         dist = min(d_wall, d_lava, d_ent)
-        out[o + 0] = dist / cfg.view_range
+        out[o + 0] = min(1.5, max(0.0, dist / cfg.view_range * (1.0 + noise)))
         out[o + 1] = 1.0 if dist == d_wall else 0.0
         out[o + 2] = 1.0 if dist == d_lava and d_lava < d_wall else 0.0
         out[o + 3] = 1.0 if ent_type == "food" else 0.0

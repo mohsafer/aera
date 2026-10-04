@@ -92,7 +92,8 @@ def integrate(agent, world: World, dt: float) -> None:
     if agent.airborne > 0.0:
         speed_mult = max(speed_mult, 1.3)   # a leap clears pits and mud
     dist = agent.v * speed_mult * dt
-    dx = math.cos(agent.heading) * dist
-    dy = math.sin(agent.heading) * dist
+    wx, wy = world.wind                      # anomaly drift (storm gusts)
+    dx = math.cos(agent.heading) * dist + wx * dt
+    dy = math.sin(agent.heading) * dist + wy * dt
     agent.x, agent.y = world.move_circle(agent.x, agent.y, dx, dy,
                                          agent.cfg.radius, agent.airborne > 0.0)

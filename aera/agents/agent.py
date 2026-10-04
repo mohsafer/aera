@@ -28,6 +28,7 @@ class Agent:
         self.foods_eaten = 0
         self.steps_alive = 0
         self.speed_sum = 0.0          # ∫v dt over the episode → mean speed
+        self.sensor_noise = 0.0       # set by the env (fog anomaly); senses
         self.events: list[str] = []
         self.physics = PHYSICS[cfg.kind]
 
@@ -54,6 +55,7 @@ class Agent:
         self.foods_eaten = 0
         self.steps_alive = 0
         self.speed_sum = 0.0
+        self.sensor_noise = 0.0
         self.events.clear()
 
     def record_cell(self) -> bool:

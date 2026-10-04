@@ -45,6 +45,7 @@ class World:
         self.foods: list[Food] = []
         self.tools: list[Tool] = []
         self.beacon: Beacon | None = None
+        self.wind = (0.0, 0.0)   # drift (m/s) applied by integrate; anomalies
         self._spawn_entities()
 
         self._passable_cells = self._count_passable()
@@ -63,8 +64,11 @@ class World:
             self.beacon = Beacon(x=float(bx) + 0.5, y=float(by) + 0.5)
 
     def reset_episode(self) -> None:
-        """Per-episode reset: foods come back, tools return to pedestals."""
+        """Per-episode reset: foods come back, tools return to pedestals,
+        anomaly scars (lava/mud rewrites) heal."""
         self.tick = 0
+        self.wind = (0.0, 0.0)
+        self.terrain.restore()
         for f in self.foods:
             f.active = True
             f.respawn_at = -1

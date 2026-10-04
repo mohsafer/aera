@@ -49,6 +49,27 @@ class TerrainGrid:
             self._blob(Terrain.LAVA, size=int(0.012 * width * height) + 5)
         for _ in range(pits):
             self._pit_strip()
+        # pristine copy: anomalies scar the grid; reset_episode restores it
+        self.pristine = self.grid.copy()
+
+    # ---------------------------------------------------------------- gen
+    def carve_blob(self, rng: np.random.Generator, value: int, size: int) -> None:
+        """Random-walk blob of `value` cells driven by an EXTERNAL rng
+        (anomalies must not consume the world's construction rng)."""
+        y = int(rng.integers(1, self.h - 1))
+        x = int(rng.integers(1, self.w - 1))
+        for _ in range(size):
+            if 0 < y < self.h - 1 and 0 < x < self.w - 1:
+                self.grid[y, x] = value
+            if rng.random() < 0.12:
+                y = int(rng.integers(1, self.h - 1))
+                x = int(rng.integers(1, self.w - 1))
+            else:
+                y = int(np.clip(y + int(rng.integers(-1, 2)), 0, self.h - 1))
+                x = int(np.clip(x + int(rng.integers(-1, 2)), 0, self.w - 1))
+
+    def restore(self) -> None:
+        self.grid[:] = self.pristine
 
     # ---------------------------------------------------------------- gen
     def _inner(self) -> tuple[int, int]:

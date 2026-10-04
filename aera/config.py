@@ -35,6 +35,17 @@ class EntitiesCfg:
 
 
 @dataclass
+class AnomalyCfg:
+    """Episodic world stress events (see world/anomalies.py). Off by default
+    so existing configs keep their behaviour; enabled per world via JSON."""
+    enabled: bool = False
+    kinds: list = field(default_factory=lambda: [
+        "wind", "fog", "famine", "lava_surge", "terrain_shift", "quake"])
+    event_prob: float = 0.0015    # per-step trigger chance (~1 event / 100 s)
+    intensity: float = 1.0
+
+
+@dataclass
 class WorldCfg:
     name: str = "Open Field"
     width: int = 32
@@ -43,6 +54,7 @@ class WorldCfg:
     terrain: TerrainCfg = field(default_factory=TerrainCfg)
     walls: WallsCfg = field(default_factory=WallsCfg)
     entities: EntitiesCfg = field(default_factory=EntitiesCfg)
+    anomalies: AnomalyCfg = field(default_factory=AnomalyCfg)
 
 
 @dataclass
