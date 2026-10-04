@@ -319,3 +319,58 @@ Both features validated the boring way: new unit tests (36 total now) plus a
 3k-step training smoke on `field_anomalies` (events fired, sustained,
 expired, nothing NaN'd). A comprehensive user guide now lives at
 docs/USER_GUIDE.md.
+
+---
+
+## 2026-10-02 — v0.3 direction: outer-space anomalies, tool crafting, and minds
+
+Two user pushes define the next phase:
+
+1. **Anomalies with agency.** v0.2 anomalies are weather; the new reality is
+   that some come *from outside the world* — aliens/predators that drop in and
+   hunt, holes that open underfoot. The agent must learn to cope, and
+   eventually to **craft tools** (the v1 design-for) for protection: shield
+   against wind/quake, lantern against fog, planks over holes, a flare that
+   scares predators. Coping must stay *learnable through the existing sensor
+   suite* — threats get their own ray flag + a "fear" direction block, never a
+   magic "anomaly active" bit.
+
+2. **Minds: low-level reasoning / changes of thought.** LLMs can't live in the
+   10 Hz control loop (latency, cost, non-determinism). The architecture that
+   fits AERA: **LLM as a slow planner over a fast RL policy**. Every K steps a
+   pluggable `Mind` receives a compact textual world summary (energy, threats,
+   inventory, active anomaly) and emits a *thought*: a goal token
+   (forage / flee / shelter / craft / navigate) plus a one-line rationale.
+   The goal conditions the policy (goal slot in the obs); the rationale goes
+   to the event feed — watchable reasoning, ★ THOUGHT: "storm coming → craft
+   shield". Protocol: `aera/minds/` with a deterministic `RuleMind` (stdlib,
+   always available, testable) and an optional `LLMMind` (any
+   OpenAI-compatible endpoint via AERA_LLM_URL, temperature 0). The gym env
+   stays pure — the mind lives in a trainer/watch wrapper layer, and its
+   outputs are logged as `type: thought` records. Determinism note: env
+   remains bit-deterministic given a goal sequence; LLM-backed runs are
+   recorded but not tape-replayable — an explicit, documented exception.
+
+Build order: (a) predators + holes + alien_drop + threat senses → (b)
+workbench + crafting + protective effects → (c) minds (rule first, LLM
+second) → (d) a robustness benchmark (train on field_open, eval across
+field_anomalies + alien world).
+
+**Monitoring whether minds matter** (user requirement): every thought is
+logged (`type: thought` with goal + rationale + world summary hash), and the
+trainer computes a *mind audit*: (1) behavior conditioned on goal — speed,
+food/min, distance-to-threat, damage/min per goal token; (2) behavioral
+delta after each thought vs matched random windows (did anything actually
+change?); (3) the decisive counterfactual — same seed, mind ON vs OFF vs
+shuffled-thoughts, diffing episode returns and anomaly survival. RuleMind is
+deterministic, so these A/B runs replay exactly and the comparison is clean.
+The audit lands in metrics.jsonl and as a `mind_audit` panel in `aera plot`.
+
+**Visual evaluation of growth** (user requirement): numbers aren't enough —
+growth must be SEEABLE. The robustness benchmark (build order (d)) therefore
+renders, not just computes: (a) milestone timelines (when each ★ unlocked,
+per run); (b) "day 1 vs day N" reels — the same seeded episode replayed by
+an early checkpoint and a late checkpoint, frames aligned side by side into
+one GIF; (c) the existing curve sheets per run; (d) mind-audit panels once
+minds exist. All rendered through the same headless renderer, so the
+benchmark script outputs a browsable folder for the SSH-tunnel workflow.
