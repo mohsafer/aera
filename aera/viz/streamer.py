@@ -28,7 +28,8 @@ body{background:#12141a;color:#e8e6dc;font-family:monospace;margin:0;display:fle
 #side{padding:12px;width:40vw;box-sizing:border-box;overflow-y:auto}
 h3{color:#8c8c87;font-weight:normal;margin:10px 0 4px}
 canvas{background:#181b22;border:1px solid #46484a;display:block;margin-bottom:6px}
-#feed{white-space:pre-wrap;font-size:13px;line-height:1.5}
+#feed{white-space:pre-wrap;font-size:13px;line-height:1.5;height:390px;
+overflow-y:auto;background:#181b22;border:1px solid #46484a;padding:6px}
 </style></head><body>
 <img id="v" src="/stream">
 <div id="side">
@@ -37,8 +38,15 @@ canvas{background:#181b22;border:1px solid #46484a;display:block;margin-bottom:6
 <canvas id="c1" width="440" height="100"></canvas>
 <canvas id="c2" width="440" height="100"></canvas>
 <canvas id="c3" width="440" height="100"></canvas>
-<h3>event feed (live)</h3><div id="feed">…</div></div>
+<h3>event feed (live — auto-scrolls; scroll up to hold)</h3>
+<div id="feed">…</div></div>
 <script>
+const feed = document.getElementById('feed');
+function updateFeed(lines){
+  const hold = feed.scrollHeight - feed.scrollTop - feed.clientHeight > 30;
+  feed.textContent = lines.join('\\n');
+  if(!hold) feed.scrollTop = feed.scrollHeight;   // follow unless user scrolled up
+}
 function line(cv, ys, color, label){
   const g = cv.getContext('2d');
   g.clearRect(0,0,cv.width,cv.height);
@@ -67,7 +75,7 @@ setInterval(()=>fetch('/curves').then(r=>r.json()).then(d=>{
   line(document.getElementById('c3'), d.updates.map(u=>u[4]), '#e85a46', 'clip fraction');
 }).catch(()=>{}),2000);
 setInterval(()=>fetch('/events').then(r=>r.json()).then(
-  e=>{document.getElementById('feed').textContent=e.feed.join('\\n')}),1000);
+  e=>updateFeed(e.feed)).catch(()=>{}),1000);
 </script></body></html>"""
 
 
@@ -85,6 +93,7 @@ class FrameStreamer:
         self.quit_requested = False          # trainer hook compatibility
         self._server = None
         self._thread = None
+        self._clients = 0                   # /stream viewers: render only if > 0
         # live training curves: [step, pi_loss, v_loss, entropy, clipfrac]
         self.updates: list[list[float]] = []
         self.episodes: list[list[float]] = []   # [episode, return]
@@ -104,9 +113,10 @@ class FrameStreamer:
 
     # ------------------------------------------------------- producer side
     def tick(self, env, min_interval: float = 0.1) -> bool:
-        """Call once per env step (trainer hook). Renders at ~10 fps max."""
+        """Call once per env step (trainer hook). Renders at ~10 fps max,
+        and only while at least one browser is watching the stream."""
         now = time.monotonic()
-        if not hasattr(self, "_last") or now - self._last >= min_interval:
+        if self._clients > 0 and now - getattr(self, "_last", 0.0) >= min_interval:
             self._last = now
             try:
                 arr = render_frame(env, self._cam, size=self.size,
@@ -142,6 +152,7 @@ class FrameStreamer:
                     self.send_header("Content-Type",
                                      "multipart/x-mixed-replace; boundary=frame")
                     self.end_headers()
+                    streamer._clients += 1
                     try:
                         while True:
                             with streamer._lock:
@@ -154,6 +165,8 @@ class FrameStreamer:
                             time.sleep(0.08)
                     except (ConnectionAbortedError, BrokenPipeError):
                         pass
+                    finally:
+                        streamer._clients -= 1
                 elif self.path == "/curves":
                     import json
                     with streamer._lock:
