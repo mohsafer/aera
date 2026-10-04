@@ -20,6 +20,7 @@ import math
 import numpy as np
 
 from ..config import AgentCfg
+from ..minds.base import GOALS
 from ..world.terrain import N_TERRAIN, Terrain
 from ..world.world import World
 
@@ -51,7 +52,8 @@ def ray_channels(cfg: AgentCfg) -> int:
 def obs_dim(cfg: AgentCfg) -> int:
     return (cfg.view_rays * ray_channels(cfg) + proprio_dim(cfg) + 9 * N_TERRAIN
             + N_INVENTORY + (3 if cfg.scent else 0) + 3
-            + (4 if cfg.threat_sense else 0))
+            + (4 if cfg.threat_sense else 0)
+            + (len(GOALS) if cfg.mind_goal else 0))
 
 
 def obs_layout(cfg: AgentCfg) -> list[tuple[str, int]]:
@@ -62,6 +64,8 @@ def obs_layout(cfg: AgentCfg) -> list[tuple[str, int]]:
     seg.append(("beacon", 3))
     if cfg.threat_sense:
         seg.append(("fear", 4))    # sin/cos/dist to nearest predator + count
+    if cfg.mind_goal:
+        seg.append(("goal", len(GOALS)))   # one-hot: the mind's current goal
     return seg
 
 
@@ -159,6 +163,14 @@ def build_obs(agent, world: World, cfg: AgentCfg) -> np.ndarray:
             out[o + 1] = math.cos(rel)
             out[o + 2] = min(1.0, bd / cfg.view_range)
             out[o + 3] = min(1.0, len(world.predators) / 5.0)
+        o += 4
+
+    # ---- goal one-hot (set by the Mind layer) ------------------------------
+    if cfg.mind_goal:
+        goal = getattr(agent, "goal", "explore")
+        if goal not in GOALS:
+            goal = "explore"
+        out[o + GOALS.index(goal)] = 1.0
     return out
 
 

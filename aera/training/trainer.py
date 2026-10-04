@@ -1,5 +1,6 @@
 """The training loop: collect → GAE → PPO update → log → checkpoint, with an
-optional live viewer attached to the very env being trained.
+optional live viewer attached to the very env being trained, and an optional
+Mind (rule or LLM) that thinks every K steps and conditions the policy.
 """
 from __future__ import annotations
 
@@ -12,15 +13,51 @@ import numpy as np
 
 from ..agents.senses import action_dim, obs_dim
 from ..env import AeraEnv
+from ..minds.base import LLMMind, Mind, RuleMind, build_summary
 from ..rl.ppo_numpy import PPO
 from .metrics import JsonlLogger, MilestoneTracker
+
+
+def make_mind(kind: str, endpoint: str | None) -> Mind | None:
+    if kind in ("none", "", None):
+        return None
+    if kind == "rule":
+        return RuleMind()
+    if kind == "llm":
+        return LLMMind(url=endpoint)
+    raise ValueError(f"unknown mind kind: {kind}")
+
+
+class MindHook:
+    """Thinks every `interval` env steps; publishes the thought to the event
+    feed (streamer/HUD), the agent's goal slot, and metrics.jsonl."""
+
+    def __init__(self, mind: Mind, interval: int, logger: JsonlLogger):
+        self.mind = mind
+        self.interval = max(1, interval)
+        self.logger = logger
+        self.count = 0
+
+    def before_act(self, env: AeraEnv, global_step: int) -> None:
+        if env.steps % self.interval:
+            return
+        summary = build_summary(env)
+        thought = self.mind.decide(summary)
+        env.agent.goal = thought.goal
+        env.last_events.append(f"★ THOUGHT: {thought.goal} — {thought.rationale}")
+        self.count += 1
+        self.logger.log({"type": "thought", "step": global_step,
+                         "mind": self.mind.name, "episode": env.episode,
+                         "goal": thought.goal, "rationale": thought.rationale,
+                         "summary": summary})
 
 
 class Trainer:
     def __init__(self, config, out_dir: str, total_steps: int = 200_000,
                  rollout: int = 2048, seed: int = 0, viewer=None,
                  save_every_updates: int = 20, init_from: str | None = None,
-                 lr: float | None = None, resume_from: str | None = None):
+                 lr: float | None = None, resume_from: str | None = None,
+                 mind: Mind | None = None, mind_interval: int = 25):
         self.config = config
         self.out = out_dir
         self.total_steps = total_steps
@@ -39,6 +76,8 @@ class Trainer:
         # both RNG states. Resumes at an episode boundary, so the rollout
         # buffer boundary may differ from an uninterrupted run.
         self.resume_from = resume_from
+        self.mind = mind
+        self.mind_interval = mind_interval
 
         os.makedirs(out_dir, exist_ok=True)
         self.logger = JsonlLogger(os.path.join(out_dir, "metrics.jsonl"))
@@ -51,6 +90,8 @@ class Trainer:
         obs_dim_ = obs_dim(self.config.agent)
         act_dim_ = action_dim(self.config.agent.kind)
         ppo = PPO(obs_dim_, act_dim_, seed=self.seed, **({"lr": self.lr} if self.lr else {}))
+        hook = (MindHook(self.mind, self.mind_interval, self.logger)
+                if self.mind is not None else None)
         global_step, update = 0, 0
         if self.init_from:
             ppo.load(self.init_from)
@@ -81,6 +122,8 @@ class Trainer:
         while global_step < self.total_steps:
             buf = {k: [] for k in ("obs", "act", "logp", "val", "rew", "done")}
             for _ in range(self.rollout):
+                if hook is not None:
+                    hook.before_act(env, global_step)
                 a, logp, val = ppo.act(obs)
                 nobs, rew, term, trunc, info = env.step(a)
                 if self.viewer is not None:

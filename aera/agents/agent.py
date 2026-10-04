@@ -29,6 +29,7 @@ class Agent:
         self.steps_alive = 0
         self.speed_sum = 0.0          # ∫v dt over the episode → mean speed
         self.sensor_noise = 0.0       # set by the env (fog anomaly); senses
+        self.goal = "explore"         # set by the Mind layer (goal one-hot)
         self.events: list[str] = []
         self.physics = PHYSICS[cfg.kind]
 
@@ -56,6 +57,7 @@ class Agent:
         self.steps_alive = 0
         self.speed_sum = 0.0
         self.sensor_noise = 0.0
+        self.goal = "explore"
         self.events.clear()
 
     def record_cell(self) -> bool:

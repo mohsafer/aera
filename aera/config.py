@@ -76,6 +76,7 @@ class AgentCfg:
     cpg: bool = True              # include gait-phase clock in walker obs
     scent: bool = True            # include direction-to-nearest-food in obs
     threat_sense: bool = False    # predator ray flag + fear block (v0.3 worlds)
+    mind_goal: bool = False       # goal one-hot slot for the Mind layer (v0.3)
 
 
 @dataclass

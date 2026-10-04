@@ -59,11 +59,12 @@ class Viewer:
         return not self.quit_requested
 
     # ------------------------------------------------------ standalone
-    def play(self, env, policy=None, seed: int = 0):
+    def play(self, env, policy=None, seed: int = 0, mind=None, mind_interval: int = 25):
         """Run the env loop here: policy=None → random actions; pass a
         `aera.rl.ppo_numpy.PPO` (or any object with .act(obs)) for playback."""
         obs, _ = env.reset(seed=seed)
         running = True
+        n = 0
         while running and not self.quit_requested:
             self.clock.tick(60)
             self._acc += self.clock.get_time() / 1000.0
@@ -71,9 +72,15 @@ class Viewer:
             act_now = (not self.paused) or self.step_once
             while self._acc >= step_dt and act_now:
                 self._acc -= step_dt
+                if mind is not None and n % mind_interval == 0:
+                    from ..minds.base import build_summary
+                    t = mind.decide(build_summary(env))
+                    env.agent.goal = t.goal
+                    env.last_events.append(f"★ THOUGHT: {t.goal} — {t.rationale}")
                 a = (policy.act(obs, deterministic=True)[0]
                      if policy is not None else env.action_space.sample())
                 obs, _, term, trunc, info = env.step(a)
+                n += 1
                 for ev in info["events"]:
                     self.events.append(f"[ep {env.episode}] {ev}")
                 if term or trunc:

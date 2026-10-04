@@ -95,6 +95,8 @@ def draw_vitals(surf, env, rect, font, big):
 
     inv = ",".join(a.inventory) or "-"
     surf.blit(big.render(f"agent: {a.kind}   ep {env.episode:5d}", True, INK), (x, y)); y += 26
+    if getattr(a, "goal", None):
+        surf.blit(big.render(f"★ goal: {a.goal}", True, GOOD), (x, y)); y += 22
     bar("energy", a.energy / a.cfg.max_energy, WARN)
     bar("health", a.health / a.cfg.max_health, BAD)
     if a.is_walker:

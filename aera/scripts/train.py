@@ -10,7 +10,7 @@ import argparse
 import os
 
 from ..config import Config
-from ..training.trainer import Trainer
+from ..training.trainer import Trainer, make_mind
 
 
 def main(argv=None) -> str:
@@ -39,11 +39,21 @@ def main(argv=None) -> str:
     p.add_argument("--resume", default=None, metavar="RUNDIR",
                    help="continue from a run directory's trainer_state.npz "
                         "(policy + optimizer + curriculum episode + RNG state)")
+    p.add_argument("--mind", choices=("none", "rule", "llm"), default="none",
+                   help="attach a Mind: 'rule' = deterministic heuristics, "
+                        "'llm' = OpenAI-compatible endpoint (AERA_LLM_URL)")
+    p.add_argument("--mind-interval", type=int, default=25,
+                   help="env steps between thoughts (25 = every 2.5 s)")
+    p.add_argument("--mind-endpoint", default=None, metavar="URL",
+                   help="chat completions URL for --mind llm "
+                        "(default env AERA_LLM_URL)")
     args = p.parse_args(argv)
 
     config = Config.load(args.config)
     if args.agent:
         config.agent.kind = args.agent
+    if args.mind != "none":
+        config.agent.mind_goal = True     # obs gains the goal one-hot slot
 
     name = os.path.splitext(os.path.basename(args.config))[0]
     out = args.out or os.path.join("runs", f"{config.agent.kind}_{name}_s{args.seed}")
@@ -58,10 +68,12 @@ def main(argv=None) -> str:
         viewer = StreamViewer(port=args.stream)
 
     print(f"AERA training → {out}  (agent={config.agent.kind}, "
-          f"world={config.world.name}, steps={args.steps})")
+          f"world={config.world.name}, steps={args.steps}, mind={args.mind})")
     Trainer(config, out, total_steps=args.steps, rollout=args.rollout,
             seed=args.seed, viewer=viewer, init_from=args.init,
-            lr=args.lr, resume_from=args.resume).train()
+            lr=args.lr, resume_from=args.resume,
+            mind=make_mind(args.mind, args.mind_endpoint),
+            mind_interval=args.mind_interval).train()
     return out
 
 

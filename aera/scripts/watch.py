@@ -28,13 +28,22 @@ def main(argv=None):
     p.add_argument("--stream", type=int, default=None, metavar="PORT",
                    help="serve a live browser view (MJPEG) on 127.0.0.1:PORT "
                         "instead of opening a window")
+    p.add_argument("--mind", choices=("none", "rule", "llm"), default="none",
+                   help="attach a Mind during playback (thoughts hit the feed)")
+    p.add_argument("--mind-interval", type=int, default=25)
+    p.add_argument("--mind-endpoint", default=None, metavar="URL")
     p.add_argument("--frames", type=int, default=300)
     args = p.parse_args(argv)
 
     config = Config.load(args.config)
     if args.agent:
         config.agent.kind = args.agent
+    if args.mind != "none":
+        config.agent.mind_goal = True
     env = AeraEnv(config)
+    from ..minds.base import build_summary
+    from ..training.trainer import make_mind
+    mind = make_mind(args.mind, args.mind_endpoint)
 
     policy = None
     if args.ckpt:
@@ -53,11 +62,14 @@ def main(argv=None):
         from ..viz.streamer import StreamViewer
         print(f"live view → http://localhost:{args.stream}/ "
               f"(via ssh -L {args.stream}:localhost:{args.stream} user@host)")
-        StreamViewer(port=args.stream).play(env, policy, seed=args.seed)
+        StreamViewer(port=args.stream).play(env, policy, seed=args.seed,
+                                            mind=mind,
+                                            mind_interval=args.mind_interval)
         return None
 
     from ..viz.viewer import Viewer
-    Viewer().play(env, policy, seed=args.seed)
+    Viewer().play(env, policy, seed=args.seed, mind=mind,
+                  mind_interval=args.mind_interval)
     return None
 
 
