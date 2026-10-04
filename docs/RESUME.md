@@ -1,53 +1,84 @@
-# Server session state — 2026-10-02 (v0.2 complete)
+# AERA — project status & transfer guide (2026-10-04)
 
-All work committed through `09d1f83` (local; `origin/main` is behind — push
-when ready). Tests: **36/36**. Full record below; hands-on manual:
-`docs/USER_GUIDE.md`.
+Snapshot of everything done on the training server, and exactly how to
+continue on a new machine. Read this first, then `README.md` (pitch) and
+`AGENTS.md` (technical contract). Hands-on manual: `docs/USER_GUIDE.md`.
 
-## Headline results (all under `runs/`)
+## Current state (one paragraph)
 
-| run | budget | result |
+v0.3, **45/45 tests green**, repo clean at commit `b25da49`. The full loop
+works end-to-end: seeded deterministic world → numpy PPO + SB3 → live browser
+streaming (video + event feed + live PPO curves) → plotting with mind-audit
+charts. Walker fully trained on the clean world (600k + 400k continuation,
+ret ~44, 0.75 m/s, 6/6 milestones under the speed-normalized Explorer rule);
+walker mid-training on the ALIEN world (anomalies + predators), paused
+resumably at step 137k/300k. Minds layer implemented (RuleMind deterministic;
+LLMMind for any OpenAI-compatible endpoint). Demo GIFs, curve sheets, and
+checkpoint files for every run are in `runs/` (14 MB — included in the
+transfer archive, gitignored in the repo).
+
+## What's in the transfer archive
+
+- `aera.bundle` — the full git history (all commits incl. unpushed). Clone:
+  `git clone aera.bundle aera && cd aera && git checkout main`
+- `runs/` — every training artifact: checkpoints (`policy_best.npz`,
+  `policy_final.npz`, `trainer_state.npz` for resume), `metrics.jsonl`,
+  curve PNGs, demo GIFs, SB3 zips.
+- `README-TRANSFER.txt` — this file's short version.
+
+## New-server setup (no pip/ensurepip images included)
+
+```bash
+git clone aera.bundle aera && cd aera
+python3 -m venv --without-pip .venv      # if pip is missing
+curl -sS https://bootstrap.pypa.io/get-pip.py -o /tmp/get-pip.py
+.venv/bin/python /tmp/get-pip.py
+.venv/bin/pip install -r requirements.txt
+.venv/bin/python -m pytest -q            # expect 45 passed
+tar xf aera-runs.tar.gz                  # → runs/ (do this inside the repo)
+```
+
+Optional extras: `pip install torch --index-url https://download.pytorch.org/whl/cpu
+stable-baselines3` (baseline runs), `matplotlib` is in requirements (plots).
+
+## Continue the paused alien-world run (137k/300k)
+
+```bash
+.venv/bin/python -m aera train --config configs/field_anomalies.json \
+    --steps 300000 --resume runs/walker_field_anomalies_s0 --stream 8888
+```
+
+`trainer_state.npz` carries policy + obs-norm + Adam moments + curriculum
+episode counter + RNG states: it continues at the exact episode boundary
+(last save: step ~137k; up to 20 updates since the previous save are lost —
+lower `--save-every` via Trainer for finer checkpoints). Watch it live via
+`ssh -L 8888:localhost:8888` → http://localhost:8888 (video + curves + feed).
+
+## Run inventory (runs/)
+
+| run | state | note |
 |---|---|---|
-| `walker_field_open_s0` | **600k steps, complete** | ret −3 → ~41 (last-10 mean 41.1); speed 0.3 → **0.75 m/s**; food 0 → 8-12/ep; **milestones 5/6**: Navigator@14, ToolUser@19, Survivor@31, Forager@44, **Walking@271**. No gait tuning needed — walking emerged inside budget. |
-| `rover_field_small_200k_s0` | 200k steps | peak rolling ret 8.3 / speed **1.09 m/s** (ep ~120-140), then oscillates down to ~4-5 — the constant-lr reference PPO can't hold its peak; rover Walking (≥1.2 m/s rolling) needs a stronger optimizer, not env changes |
-| `rover_field_small_s0` | 50k steps | ret 1.1 → ~3.5, drives ~0.7-1.1 m/s; no milestone |
-| `sb3_rover_field_small_s0` | 30k steps | last-10 mean ret **18.0** vs built-in PPO **2.5** at the same budget |
-| `sb3_walker_field_open_s0` | 300k steps (complete) | last-10 mean ret **46.3** — beats the built-in walker's ~41 with **half** the steps; checkpoint `sb3_policy.zip` saved |
-| `walker_field_open_s0_warm400k` | +400k (≈1M total, complete) | warm-start recipe validated (`--init --lr 1e-4`, no NaN after the ratio-overflow fix): ret 34 → **44.2** via foraging consistency (+1 food/ep); speed flat at ~0.71-0.75 m/s — the gait has plateaued at partial coordination; exploration still ~0.13 |
-| `walker_field_open_s0_warm400k_diverged` | (first attempt) | NaN collapse at update 181 — kept as the log.md war-story evidence; root cause + fix in `rl/ppo_numpy.py` |
+| `walker_field_anomalies_s0` | PAUSED 137k/300k, resumable | alien world; Explorer@14, Navigator@14, ToolUser@16 |
+| `walker_field_open_s0` | complete 600k | ret ~41, 0.75 m/s, 6/6 milestones (Walking@271) |
+| `walker_field_open_s0_warm400k` | complete (+400k) | ret ~44 via foraging; speed plateaued |
+| `walker_field_open_s0_warm400k_diverged` | evidence | NaN war story (log.md) |
+| `rover_field_small_s0` / `_200k_s0` | complete | peak 1.09 m/s; reference-PPO oscillation |
+| `sb3_rover_field_small_s0` | complete 30k | ret 18 vs built-in 2.5 |
+| `sb3_walker_field_open_s0` | complete 300k | ret 46.3 vs built-in ~41 |
+| `*_prefix1/_oldunits/_nologs/_paused254k` | historical | pre-fix evidence, kept for the record |
 
-- The paused first attempt is kept as `runs/walker_field_open_s0_paused254k`
-  (deterministic prefix of the final run; the rerun reproduced it exactly —
-  verified byte-identical trainer output through update 124).
-- Plots: `curves_episodes.png` + `curves_updates.png` per run; replays in
-  `demo.gif`. Walker exploration plateaus at ~0.12 — the **Explorer milestone
-  (≥0.5) is unreachable** at this world size/episode budget; either shrink the
-  threshold (≈0.15), raise `max_steps`, or strengthen `w_novelty` (design call,
-  not a bug).
-- README hero image: `docs/screenshot.png` (rover | walker frames from the GIFs).
+## Mind-audit: the open experiment
 
-## Code changed (uncommitted working tree on `main`, base `beee896`)
+`python -m aera plot runs/<run>` renders `curves_mind.png` (goals over steps
++ counts) when thought records exist. The honest test that reasoning helps:
+same seed, `--mind rule` vs `--mind none`, compare returns; then LLMMind
+(export `AERA_LLM_URL`, `AERA_LLM_MODEL`) once an endpoint is chosen.
 
-Fixes: `config.py::_merge` recursive nested-dataclass merge; PPO `g_logstd`
-broadcast + threaded RNG (no global np.random); `move_circle` sub-stepping
-(no wall tunneling); `mean_speed` now true m/s; renderer casts screen points
-to plain floats (pygame-ce rejects np.float32); `action_dim(kind)` call sites;
-viewer chart fed during `--watch`. Tests: 3 expectation fixes + missing import.
+## Housekeeping
 
-Features: `python -m aera sb3` (Monitor CSV + logger CSV), `python -m aera
-plot <run_dir>`, README hero + artifacts section, `.gitignore` (runs/, .venv/).
-
-## Suggested next steps
-
-1. `git push` — 6 local commits ahead of `origin/main` (user's earlier
-   commits were pushed; the session's are not).
-2. Train on the stress world: `python -m aera train --config
-   configs/field_anomalies.json --steps 600000` and compare curves against
-   `runs/walker_field_open_s0` (robustness evidence for the log).
-3. Longer-term: two-agent coexistence, tool crafting.
-
-## Viewing from a laptop
-
-`python -m http.server 8000 --bind 127.0.0.1` inside `runs/` (left running)
-+ `ssh -L 8000:localhost:8000 <user>@node0.quickhttpnode15.cloudfaas-pg0.wisc.cloudlab.us`
-→ http://localhost:8000. Live viewer: `ssh -X` + `python -m aera train --watch`.
+- `origin` = https://github.com/mohsafer/aera — server commits through
+  `7c301c4` are pushed; everything after (`f08b843`…`b25da49`) is local-only
+  but INCLUDED in the bundle. Optionally `git push --all` after transfer.
+- Ports used on the old server: 8000 (runs/ browsing), 8888/8889 (live
+  streams), 9000 (user service) — all loopback-bound, nothing exposed.
+- Python on the old box: 3.10.12. Code targets ≥ 3.10.
