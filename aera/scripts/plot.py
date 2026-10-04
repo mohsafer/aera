@@ -150,7 +150,56 @@ def plot_run(run_dir: str, window: int = 15) -> list[str]:
                                     keys=series, x_label="env steps")
                 written.append(os.path.join(run_dir, "curves_updates.png"))
 
+    # minds: goal distribution over episodes, when thought records exist
+    jl_full = os.path.join(run_dir, "metrics.jsonl")
+    if os.path.exists(jl_full):
+        _, all_updates = _load_jsonl(jl_full)
+        thought_recs = _load_thoughts(jl_full)
+        if thought_recs:
+            out_mind = os.path.join(run_dir, "curves_mind.png")
+            _plot_mind(out_mind, thought_recs)
+            written.append(out_mind)
+
     return written
+
+
+def _load_thoughts(path: str) -> list[dict]:
+    out = []
+    with open(path, "r", encoding="utf-8") as f:
+        for line in f:
+            try:
+                rec = json.loads(line)
+            except json.JSONDecodeError:
+                continue
+            if rec.get("type") == "thought":
+                out.append(rec)
+    return out
+
+
+def _plot_mind(out_path: str, thoughts: list[dict]) -> None:
+    import matplotlib
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+    from collections import Counter
+
+    goals = [t.get("goal", "?") for t in thoughts]
+    counts = Counter(goals)
+    fig, axes = plt.subplots(1, 2, figsize=(11, 3.6))
+    fig.suptitle("mind audit — thoughts", fontsize=12)
+    steps = [t.get("step", i) for i, t in enumerate(thoughts)]
+    ids = {g: i for i, g in enumerate(sorted(set(goals)))}
+    axes[0].scatter(steps, [ids[g] for g in goals], s=6, color="#c45448")
+    axes[0].set_yticks(range(len(ids)))
+    axes[0].set_yticklabels(list(ids.keys()), fontsize=8)
+    axes[0].set_title("goal over env steps", fontsize=10)
+    axes[0].set_xlabel("env steps", fontsize=9)
+    axes[0].grid(alpha=0.25)
+    axes[1].barh(list(counts.keys()), [counts[g] for g in counts], color="#20242c")
+    axes[1].set_title("thought count per goal", fontsize=10)
+    axes[1].tick_params(labelsize=8)
+    fig.tight_layout()
+    fig.savefig(out_path, dpi=130)
+    plt.close(fig)
 
 
 def _plot_update_curves(run_dir: str, rows, keys, x_label: str) -> None:

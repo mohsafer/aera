@@ -198,7 +198,39 @@ Per-episode keys: `steps`, `ret`, `score`, `foods`, `mean_speed` (true m/s),
 `explored` (fraction of passable cells), `explored_norm` (speed-normalized),
 `inventory`, `beacon`, `events` (story lines — including anomalies).
 
-## 7. Stable-Baselines3
+## 7. Minds — give the agent thoughts
+
+A **Mind** is a slow reasoning layer above the fast RL policy: every
+`--mind-interval` steps (default 25 = 2.5 sim-seconds) it reads a compact
+world summary (energy, health, threat/food/beacon distances, inventory) and
+emits a *thought* — a goal (`forage / flee / shelter / craft / navigate /
+explore`) plus a one-line rationale. The goal enters the policy through a
+one-hot slot in the observation; the rationale streams into the event feed
+(`★ THOUGHT: forage — starving`) and every thought lands in
+`metrics.jsonl` (`type: thought`) for auditing.
+
+```bash
+# deterministic rule-based mind (no dependencies)
+.venv/bin/python -m aera train --config configs/field_anomalies.json --mind rule
+
+# LLM mind — any OpenAI-compatible chat endpoint (local ollama or hosted)
+export AERA_LLM_URL=http://localhost:11434/v1/chat/completions   # ollama
+export AERA_LLM_MODEL=llama3.1
+.venv/bin/python -m aera train --config configs/field_anomalies.json --mind llm
+
+# watch a minded policy (thoughts appear live in the stream feed)
+.venv/bin/python -m aera watch --ckpt ... --mind rule --stream 8889
+```
+
+Notes: the environment stays a pure Gymnasium env — the mind lives in the
+trainer/watch loop, so SB3 users can ignore it. LLM runs are recorded but
+not bit-reproducible (documented exception to the determinism invariant).
+`python -m aera plot <run>` renders `curves_mind.png` (goal over steps +
+per-goal counts) when thought records exist. To measure whether thoughts
+*help*, run the same seed with `--mind rule` vs `--mind none` and compare
+returns — the honest A/B.
+
+## 8. Stable-Baselines3
 
 ```bash
 .venv/bin/python -m aera sb3 --config configs/field_open.json --steps 300000
@@ -218,7 +250,7 @@ Measured on this project: SB3 beats the built-in PPO ~7× on the rover smoke
 world at equal steps and beats its 600k-step walker score in 300k steps. The
 built-in numpy PPO is the readable reference; SB3 is the serious optimizer.
 
-## 8. Config reference (one JSON per world)
+## 9. Config reference (one JSON per world)
 
 ```jsonc
 {
@@ -252,7 +284,7 @@ stage, set the value again); shipped worlds are `field_small` (fast smoke),
 `field_open` (canonical), `field_curriculum` (40×40 with walls/pits/tools),
 `field_anomalies` (field_open + all stress events).
 
-## 9. Python API
+## 10. Python API
 
 ```python
 from aera.config import Config
@@ -275,7 +307,7 @@ The policy sees only `obs` and scalar `reward` — `info["sub"]` and
 `info["events"]` are the human channel. Render a frame without a window:
 `env.render()` (with `render_mode="rgb_array"`) → RGB uint8 array.
 
-## 10. Troubleshooting
+## 11. Troubleshooting
 
 | symptom | cause / fix |
 |---|---|
@@ -287,7 +319,7 @@ The policy sees only `obs` and scalar `reward` — `info["sub"]` and
 | rover learned weird extra actions | fixed in v0.1.1 (action_dim bug); retrain — old rover checkpoints have a 6-dim head |
 | milestone never fires | thresholds are rolling-15 rules; check the definitions in `aera/training/metrics.py::RULES` against your run's curves |
 
-## 11. Extending (quick recipes)
+## 12. Extending (quick recipes)
 
 Full recipes in `AGENTS.md §8`; the short version:
 

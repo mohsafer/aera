@@ -90,9 +90,18 @@ aera/
     viewer.py          Viewer: pygame window; .tick(env) hook for trainer,
                        .play(env, policy) standalone; input handling
     record.py          record_gif: headless rollout → GIF via Pillow
+  minds/
+    base.py            Mind protocol: RuleMind (deterministic) + LLMMind
+                       (OpenAI-compatible, stdlib), Thought, build_summary;
+                       trainer hook thinks every K steps, logs `type: thought`
+  minds/
+    base.py            Mind protocol: RuleMind (deterministic heuristics) +
+                       LLMMind (OpenAI-compatible, stdlib urllib); Thought,
+                       build_summary; trainer thinks every K steps, logs
+                       `type: thought` records (mind audit: aera plot)
   scripts/
     train.py           CLI  → python -m aera train
-    watch.py           CLI  → python -m aera watch (or --record out.gif)
+    watch.py           CLI  → python -m aera watch (or --record/--stream)
     sb3.py             CLI  → python -m aera sb3 (optional SB3 baseline;
                        Monitor CSV + logger CSV + 50k-step checkpoints)
     plot.py            CLI  → python -m aera plot <run_dir> → curve PNGs
@@ -129,7 +138,9 @@ until the agent holds the *boots* tool — capability gating by design.
 ray-marched) · `proprio` (speed, heading sin/cos, [phase sin/cos + 4 joints
 for walker], airborne, jump_cd, energy, health, effort) · `terrain3x3`
 (9×5 one-hot) · `inventory` (4 reserved flags) · `scent` (sin/cos/dist to
-nearest food, opt-in) · `beacon` (sin/cos/dist).
+nearest food, opt-in) · `beacon` (sin/cos/dist) · with `threat_sense` a
+7th ray flag + `fear` block (nearest predator sin/cos/dist/count) · with
+`mind_goal` a one-hot `goal` slot written by the Mind layer.
 
 **Learning-to-walk mechanism** (`world/physics.py::gait_score`): thrust is
 gated by hips-in-antiphase × knees-in-phase × swing-amplitude. Random
@@ -260,12 +271,14 @@ the numpy PPO is the readable reference.
 
 ## 10. Current status & known simplifications
 
-- **Implemented & exercised (v0.2, post server session 2026-10-02)**: full
-  package above, 36/36 tests, both bodies, tools (boots→jump), beacon,
-  curriculum, milestones (Explorer speed-normalized), world anomalies, 3D
-  viewer/recorder, plotting, SB3 baseline script, `train --init` warm-start
-  and `train --resume` true continuation. Hands-on manual:
-  docs/USER_GUIDE.md.
+- **Implemented & exercised (v0.3, post server session 2026-10-02)**: full
+  package above, 45/45 tests, both bodies, tools (boots→jump), beacon,
+  curriculum, milestones (Explorer speed-normalized), world anomalies
+  (weather + alien predators + holes), 3D viewer/recorder + live browser
+  streaming (--stream: video, event feed, live PPO curves), plotting with
+  mind-audit charts, SB3 baseline script, `train --init` warm-start,
+  `train --resume` true continuation, and the Minds layer (--mind rule|llm).
+  Hands-on manual: docs/USER_GUIDE.md.
 - **Training results** (see log.md for details): walker 600k on field_open —
   5/6 milestones (Walking@271, no gait tuning needed), ret ~41, 0.75 m/s;
   +400k warm-start continuation (≈1M total): ret ~44 via foraging consistency,
