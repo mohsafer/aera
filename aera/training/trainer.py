@@ -30,13 +30,15 @@ def make_mind(kind: str, endpoint: str | None) -> Mind | None:
 
 class MindHook:
     """Thinks every `interval` env steps; publishes the thought to the event
-    feed (streamer/HUD), the agent's goal slot, and metrics.jsonl."""
+    feed (streamer/HUD), the agent's goal slot, and metrics.jsonl. The feed
+    line is held until AFTER env.step — step() replaces last_events."""
 
     def __init__(self, mind: Mind, interval: int, logger: JsonlLogger):
         self.mind = mind
         self.interval = max(1, interval)
         self.logger = logger
         self.count = 0
+        self.pending: list[str] = []
 
     def before_act(self, env: AeraEnv, global_step: int) -> None:
         if env.steps % self.interval:
@@ -44,12 +46,17 @@ class MindHook:
         summary = build_summary(env)
         thought = self.mind.decide(summary)
         env.agent.goal = thought.goal
-        env.last_events.append(f"★ THOUGHT: {thought.goal} — {thought.rationale}")
+        self.pending.append(f"★ THOUGHT: {thought.goal} — {thought.rationale}")
         self.count += 1
         self.logger.log({"type": "thought", "step": global_step,
                          "mind": self.mind.name, "episode": env.episode,
                          "goal": thought.goal, "rationale": thought.rationale,
                          "summary": summary})
+
+    def flush(self, env: AeraEnv) -> None:
+        if self.pending:
+            env.last_events.extend(self.pending)
+            self.pending.clear()
 
 
 class Trainer:
@@ -126,6 +133,8 @@ class Trainer:
                     hook.before_act(env, global_step)
                 a, logp, val = ppo.act(obs)
                 nobs, rew, term, trunc, info = env.step(a)
+                if hook is not None:
+                    hook.flush(env)
                 if self.viewer is not None:
                     self.viewer.tick(env)
                     if getattr(self.viewer, "quit_requested", False):
