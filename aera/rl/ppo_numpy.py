@@ -9,6 +9,7 @@ Gymnasium env, so `PPO("MlpPolicy", AeraEnv(config), ...)` just works.
 """
 from __future__ import annotations
 
+import json
 import math
 
 import numpy as np
@@ -195,17 +196,41 @@ class PPO:
         setattr(self, name, val)
 
     # ---------------------------------------------------------------- io
-    def save(self, path: str) -> None:
-        data = {k: self._get(k) for k in self._PARAMS}
-        data["norm_mean"] = self.norm.mean
-        data["norm_var"] = self.norm.var
+    def state_dict(self) -> dict[str, np.ndarray]:
+        """Everything needed to CONTINUE optimizing (not just act): params,
+        obs-norm, Adam moments + step count, sampler RNG state. RNG state is
+        JSON-encoded (numpy generators hold arbitrary-precision ints)."""
+        data = {k: self._get(k).copy() for k in self._PARAMS}
+        data["norm_mean"] = self.norm.mean.copy()
+        data["norm_var"] = self.norm.var.copy()
         data["norm_count"] = np.array([self.norm.count])
-        np.savez_compressed(path, **data)
+        data["adam_t"] = np.array([self._t], np.int64)
+        for k in self._PARAMS:
+            m, v = self._adam.get(k, (np.zeros_like(self._get(k)),
+                                      np.zeros_like(self._get(k))))
+            data[f"adam_m_{k}"] = m.copy()
+            data[f"adam_v_{k}"] = v.copy()
+        data["rng_state"] = np.array(json.dumps(self.rng.bit_generator.state))
+        return data
 
-    def load(self, path: str) -> None:
-        data = np.load(path)
+    def load_state_dict(self, data: dict[str, np.ndarray]) -> None:
         for k in self._PARAMS:
             self._set(k, data[k])
         self.norm.mean = data["norm_mean"]
         self.norm.var = data["norm_var"]
         self.norm.count = float(data["norm_count"][0])
+        # legacy checkpoints (weights + norm only) resume with fresh optimizer
+        self._t = int(data["adam_t"][0]) if "adam_t" in data else 1
+        for k in self._PARAMS:
+            if f"adam_m_{k}" in data:
+                self._adam[k] = (data[f"adam_m_{k}"], data[f"adam_v_{k}"])
+            else:
+                self._adam.pop(k, None)
+        if "rng_state" in data:
+            self.rng.bit_generator.state = json.loads(str(data["rng_state"]))
+
+    def save(self, path: str) -> None:
+        np.savez_compressed(path, **self.state_dict())
+
+    def load(self, path: str) -> None:
+        self.load_state_dict(dict(np.load(path)))

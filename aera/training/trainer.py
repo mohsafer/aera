@@ -3,6 +3,7 @@ optional live viewer attached to the very env being trained.
 """
 from __future__ import annotations
 
+import json
 import os
 import time
 from collections import deque
@@ -19,7 +20,7 @@ class Trainer:
     def __init__(self, config, out_dir: str, total_steps: int = 200_000,
                  rollout: int = 2048, seed: int = 0, viewer=None,
                  save_every_updates: int = 20, init_from: str | None = None,
-                 lr: float | None = None):
+                 lr: float | None = None, resume_from: str | None = None):
         self.config = config
         self.out = out_dir
         self.total_steps = total_steps
@@ -33,6 +34,11 @@ class Trainer:
         # destroy the policy (see log.md, warm-start divergence).
         self.init_from = init_from
         self.lr = lr
+        # --resume: full continuation from a run dir (trainer_state.npz):
+        # weights, norm, Adam moments, env episode counter (→ curriculum) and
+        # both RNG states. Resumes at an episode boundary, so the rollout
+        # buffer boundary may differ from an uninterrupted run.
+        self.resume_from = resume_from
 
         os.makedirs(out_dir, exist_ok=True)
         self.logger = JsonlLogger(os.path.join(out_dir, "metrics.jsonl"))
@@ -45,15 +51,31 @@ class Trainer:
         obs_dim_ = obs_dim(self.config.agent)
         act_dim_ = action_dim(self.config.agent.kind)
         ppo = PPO(obs_dim_, act_dim_, seed=self.seed, **({"lr": self.lr} if self.lr else {}))
+        global_step, update = 0, 0
         if self.init_from:
             ppo.load(self.init_from)
             print(f"warm-started policy from {self.init_from} "
                   f"(curriculum restarts at episode 0)")
+        if self.resume_from:
+            path = (self.resume_from if os.path.isfile(self.resume_from)
+                    else os.path.join(self.resume_from, "trainer_state.npz"))
+            data = dict(np.load(path))
+            ppo.load_state_dict(data)
+            env.episode = int(data["meta_episode"][0])
+            global_step = int(data["meta_global_step"][0])
+            self._best_ret = float(data["meta_best_ret"][0])
+            env.rng.bit_generator.state = json.loads(str(data["env_rng_state"]))
+            print(f"resumed from {path} at step {global_step}, "
+                  f"episode {env.episode} (curriculum continues)")
         self.config.save(os.path.join(self.out, "config_used.json"))
 
-        obs, _ = env.reset(seed=self.seed)
+        if self.resume_from:
+            # no seed argument here — it would clobber the restored RNG state;
+            # the curriculum stage is picked up from the restored env.episode
+            obs, _ = env.reset()
+        else:
+            obs, _ = env.reset(seed=self.seed)
         hp = ppo.hyper
-        global_step, update = 0, 0
         t0 = time.time()
 
         while global_step < self.total_steps:
@@ -107,6 +129,7 @@ class Trainer:
 
             if update % self.save_every == 0:
                 ppo.save(os.path.join(self.out, "policy_final.npz"))
+                self._save_resume(ppo, env, global_step)
             if len(self.episodes) == self.episodes.maxlen:
                 best = getattr(self, "_best_ret", -1e9)
                 if mean_ret > best:
@@ -114,8 +137,18 @@ class Trainer:
                     ppo.save(os.path.join(self.out, "policy_best.npz"))
 
         ppo.save(os.path.join(self.out, "policy_final.npz"))
+        self._save_resume(ppo, env, global_step)
         print(f"done in {(time.time() - t0) / 60:.1f} min → {self.out}")
         return self.out
+
+    def _save_resume(self, ppo: PPO, env: AeraEnv, global_step: int) -> None:
+        """Full continuation state: policy + optimizer + env bookkeeping."""
+        data = ppo.state_dict()
+        data["meta_episode"] = np.array([env.episode], np.int64)
+        data["meta_global_step"] = np.array([global_step], np.int64)
+        data["meta_best_ret"] = np.array([getattr(self, "_best_ret", -1e9)])
+        data["env_rng_state"] = np.array(json.dumps(env.rng.bit_generator.state))
+        np.savez_compressed(os.path.join(self.out, "trainer_state.npz"), **data)
 
     # ------------------------------------------------------------- events
     def _on_episode_end(self, ep: dict, env: AeraEnv) -> None:

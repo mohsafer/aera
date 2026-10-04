@@ -33,6 +33,9 @@ def main(argv=None) -> str:
     p.add_argument("--lr", type=float, default=None,
                    help="PPO learning rate (default 3e-4; use e.g. 1e-4 when "
                         "fine-tuning with --init)")
+    p.add_argument("--resume", default=None, metavar="RUNDIR",
+                   help="continue from a run directory's trainer_state.npz "
+                        "(policy + optimizer + curriculum episode + RNG state)")
     args = p.parse_args(argv)
 
     config = Config.load(args.config)
@@ -52,7 +55,7 @@ def main(argv=None) -> str:
           f"world={config.world.name}, steps={args.steps})")
     Trainer(config, out, total_steps=args.steps, rollout=args.rollout,
             seed=args.seed, viewer=viewer, init_from=args.init,
-            lr=args.lr).train()
+            lr=args.lr, resume_from=args.resume).train()
     return out
 
 

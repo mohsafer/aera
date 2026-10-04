@@ -49,3 +49,23 @@ def test_save_load_roundtrip():
     other.load("/tmp/aera_test_policy.npz")
     a2, _, _ = other.act(obs[0], deterministic=True)
     assert np.allclose(a1, a2, atol=1e-5)
+
+
+def test_full_state_roundtrip_continues_optimization():
+    """state_dict must carry Adam moments + RNG, not just weights: a loaded
+    PPO takes identical actions AND identical subsequent updates."""
+    obs = np.random.default_rng(3).normal(size=(128, 6)).astype(np.float32)
+    act = np.random.default_rng(4).uniform(-1, 1, size=(128, 2)).astype(np.float32)
+    ppo = PPO(obs_dim=6, act_dim=2, hidden=32, seed=0)
+    for _ in range(3):
+        ppo.update(obs, act, np.zeros(128), np.ones(128), np.ones(128))
+    snap = ppo.state_dict()          # snapshot BEFORE acting: same sampler state
+    a1, logp1, v1 = ppo.act(obs[7])
+    s1 = ppo.update(obs, act, np.zeros(128), np.ones(128), np.ones(128))
+
+    fresh = PPO(obs_dim=6, act_dim=2, hidden=32, seed=42)
+    fresh.load_state_dict(snap)
+    a2, logp2, v2 = fresh.act(obs[7])
+    s2 = fresh.update(obs, act, np.zeros(128), np.ones(128), np.ones(128))
+    assert np.allclose(a1, a2) and logp1 == logp2 and v1 == v2
+    assert np.isclose(s1["v_loss"], s2["v_loss"]) and np.isclose(s1["pi_loss"], s2["pi_loss"])
