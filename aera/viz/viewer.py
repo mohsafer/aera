@@ -124,9 +124,9 @@ class Viewer:
         panel_w = 360
         vw, vh = W - panel_w, H
 
-        # chunky 3D: render at 1/3 then nearest-upscale
+        # chunky 3D: render at 1/2 window size, nearest-upscale for the look
         small = render_scene(env.world, [env.agent], self.camera,
-                             (max(64, vw // 3), max(64, vh // 3)),
+                             (max(64, vw // 2), max(64, vh // 2)),
                              time_s=pygame.time.get_ticks() / 1000.0)
         frame = pygame.transform.scale(small, (vw, vh))
         self.screen.blit(frame, (0, 0))

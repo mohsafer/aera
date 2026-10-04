@@ -257,7 +257,7 @@ class AeraEnv(gym.Env):
         if self.render_mode != "rgb_array":
             return None
         from .viz.renderer3d import render_frame
-        return render_frame(self, camera=None, size=(426, 240))
+        return render_frame(self, camera=None, size=(640, 360))
 
     def close(self):
         pass

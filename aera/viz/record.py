@@ -10,7 +10,7 @@ from ..viz.renderer3d import render_frame
 
 
 def record_gif(env, policy, path: str, steps: int = 400, fps: int = 20,
-               mode: str = "chase", size=(426, 240), seed: int = 0) -> str:
+               mode: str = "chase", size=(640, 360), seed: int = 0) -> str:
     from PIL import Image
 
     frames = []

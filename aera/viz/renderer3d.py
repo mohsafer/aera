@@ -58,7 +58,33 @@ NEAR = 0.18
 FAR = 60.0
 
 
-def render_frame(env, camera: Camera | None = None, size=(426, 240),
+def _shade(color, nx: float = 0.0, ny: float = 0.0, nz: float = 1.0):
+    """Lambert: brightness by face normal vs LIGHT. Ground (nz=1) gets full
+    sun; wall sides split into 4 distinct tones — this is where the depth
+    comes from."""
+    d = max(0.0, nx * LIGHT[0] + ny * LIGHT[1] + nz * LIGHT[2])
+    k = min(1.15, 0.60 + 0.55 * d)
+    return (min(255, int(color[0] * k)),
+            min(255, int(color[1] * k)),
+            min(255, int(color[2] * k)))
+
+
+def _jit(x: int, y: int) -> float:
+    """Deterministic per-tile brightness jitter (stable across frames)."""
+    h = ((x * 73856093) ^ (y * 19349663)) % 997
+    return 0.93 + 0.12 * (h / 997.0)
+
+
+def _dark(color, f: float):
+    """Blend toward near-black (shadows painted as solid polygons — no alpha
+    needed since the ground colour beneath is irrelevant to the eye)."""
+    return (int(color[0] * (1 - f)), int(color[1] * (1 - f)), int(color[2] * (1 - f)))
+
+
+SHADOW = (24, 22, 20)
+
+
+def render_frame(env, camera: Camera | None = None, size=(640, 360),
                  time_s: float = 0.0) -> np.ndarray:
     """Convenience wrapper: env → RGB uint8 array (H, W, 3)."""
     surf = render_scene(env.world, [env.agent], camera or Camera("chase"),
@@ -67,9 +93,14 @@ def render_frame(env, camera: Camera | None = None, size=(426, 240),
     return np.transpose(arr, (1, 0, 2)).astype(np.uint8)
 
 
-def render_scene(world, agents, camera: Camera, size=(426, 240),
+def render_scene(world, agents, camera: Camera, size=(640, 360),
                  time_s: float = 0.0) -> pygame.Surface:
-    """Render the world into a pygame Surface (the low-res chunky buffer)."""
+    """Render the world into a pygame Surface (the chunky buffer).
+
+    Two painter passes: ground tiles + shadow quads are coplanar and
+    non-overlapping, so they paint in insertion order (shadows right after
+    the ground, before anything else); everything else sorts back-to-front.
+    """
     _ensure_video()
     W, H = size
     surf = pygame.Surface(size)
@@ -77,15 +108,13 @@ def render_scene(world, agents, camera: Camera, size=(426, 240),
     eye, right, up, fwd = camera.basis(agent, world)
 
     _sky(surf)
-    faces = _gather_faces(world, agents, eye, camera, time_s)
+    flat, faces = _gather_faces(world, agents, eye, camera, time_s)
 
     tan_f = 0.62
     aspect = W / H
-    polys = []
-    for pts, color in faces:
-        scr = []
-        depth = 0.0
-        ok = True
+
+    def project(pts):
+        scr, depth, ok = [], 0.0, True
         for (x, y, z) in pts:
             q = (x - eye[0], y - eye[1], z - eye[2])
             cz = q[0] * fwd[0] + q[1] * fwd[1] + q[2] * fwd[2]
@@ -94,13 +123,21 @@ def render_scene(world, agents, camera: Camera, size=(426, 240),
                 break
             cx = q[0] * right[0] + q[1] * right[1] + q[2] * right[2]
             cy = q[0] * up[0] + q[1] * up[1] + q[2] * up[2]
-            sx = (cx / (cz * tan_f * aspect)) * (W / 2) + W / 2
-            sy = H / 2 - (cy / (cz * tan_f)) * (H / 2)
-            scr.append((float(sx), float(sy)))   # plain floats: pygame rejects np.float32 scalars
-            depth += float(cz)
-        if ok:
-            polys.append((depth / len(pts), scr, color))
+            scr.append((float((cx / (cz * tan_f * aspect)) * (W / 2) + W / 2),
+                        float(H / 2 - (cy / (cz * tan_f)) * (H / 2))))
+            depth += cz
+        return scr, (depth / max(1, len(pts))), ok
 
+    for pts, color in flat:              # coplanar: order, don't sort
+        scr, _, ok = project(pts)
+        if ok:
+            pygame.draw.polygon(surf, color, scr)
+
+    polys = []
+    for pts, color in faces:
+        scr, depth, ok = project(pts)
+        if ok:
+            polys.append((depth, scr, color))
     polys.sort(key=lambda p: -p[0])
     for depth, scr, color in polys:
         f = min(1.0, depth / FAR) ** 1.5
@@ -111,41 +148,80 @@ def render_scene(world, agents, camera: Camera, size=(426, 240),
 
 # ------------------------------------------------------------------ scene
 def _gather_faces(world, agents, eye, camera, t):
-    faces: list = []
+    flat: list = []     # coplanar ground + shadow quads: painted in order
+    faces: list = []    # everything else: painter-sorted
     cx = agents[0].x if agents else world.w / 2
     cy = agents[0].y if agents else world.h / 2
     R = 17
     x0, x1 = int(max(0, cx - R)), int(min(world.w - 1, cx + R))
     y0, y1 = int(max(0, cy - R)), int(min(world.h - 1, cy + R))
 
-    # ground tiles
+    # ground tiles: checker pair × deterministic jitter, warm glow near lava
+    grid = world.terrain.grid
     for gy in range(y0, y1 + 1):
         for gx in range(x0, x1 + 1):
-            kind = int(world.terrain.grid[gy, gx])
+            kind = int(grid[gy, gx])
             c1, c2 = TERRAIN_COLORS[kind]
             col = c1 if (gx + gy) % 2 == 0 else c2
             if kind == 3:   # lava pulse
                 pulse = 0.5 + 0.5 * math.sin(t * 4.0 + gx * 1.7 + gy * 2.3)
                 col = (int(238 * (0.7 + 0.3 * pulse)), int(92 + 70 * pulse), 32)
-            faces.append(([(gx, gy, 0.0), (gx + 1, gy, 0.0),
-                           (gx + 1, gy + 1, 0.0), (gx, gy + 1, 0.0)], col))
+            else:
+                j = _jit(gx, gy)
+                col = (int(col[0] * j), int(col[1] * j), int(col[2] * j))
+                if kind != 4:   # lava glow bleeds onto neighbours (not pits)
+                    near = False
+                    for ddx, ddy in ((1, 0), (-1, 0), (0, 1), (0, -1)):
+                        nx2, ny2 = gx + ddx, gy + ddy
+                        if 0 <= nx2 < world.w and 0 <= ny2 < world.h \
+                                and int(grid[ny2, nx2]) == 3:
+                            near = True
+                            break
+                    if near:
+                        pulse = 0.35 + 0.25 * math.sin(t * 3.0 + gx + gy)
+                        col = (int(col[0] + (210 - col[0]) * pulse * 0.45),
+                               int(col[1] * (1 - 0.18 * pulse)),
+                               int(col[2] * (1 - 0.30 * pulse)))
+            flat.append(([(gx, gy, 0.0), (gx + 1, gy, 0.0),
+                          (gx + 1, gy + 1, 0.0), (gx, gy + 1, 0.0)], col))
 
-    # walls (boxes)
+    # walls: directional drop shadow on the ground, then lit box
     for (rx, ry, rw, rh) in world.walls:
         if rx + rw < x0 - 1 or rx > x1 + 1 or ry + rh < y0 - 1 or ry > y1 + 1:
             continue
         if rw > world.w + 1:   # border walls look better low
-            _box(faces, rx, ry, rw, rh, 0.0, 0.55, WALL, WALL_SIDE)
+            z1 = 0.55
         else:
-            _box(faces, rx, ry, rw, rh, 0.0, 1.25, WALL, WALL_SIDE)
+            z1 = 1.25
+        # light comes from (0.45,-0.5): shadows fall opposite, length ∝ height
+        ox, oy = -0.42 * z1, 0.47 * z1
+        scx = min(world.w - 1, max(0, int(rx + rw / 2)))
+        scy = min(world.h - 1, max(0, int(ry + rh / 2)))
+        base = TERRAIN_COLORS[int(world.terrain_at(scx, scy))][0]
+        flat.append(([(rx + ox, ry + oy, 0.0), (rx + rw + ox, ry + oy, 0.0),
+                      (rx + rw + ox, ry + rh + oy, 0.0),
+                      (rx + ox, ry + rh + oy, 0.0)], _dark(base, 0.5)))
+        _box(faces, rx, ry, rw, rh, 0.0, z1, WALL, WALL_SIDE)
 
-    # entities near the agent
+    # drifting cloud shadows: ground-darkened quads under each puff
+    for (ccx, ccy, _z, cs) in _cloud_puffs(world, t):
+        scx2 = min(world.w - 1, max(0, int(ccx)))
+        scy2 = min(world.h - 1, max(0, int(ccy)))
+        base = TERRAIN_COLORS[int(world.terrain_at(scx2, scy2))][0]
+        r = cs * 1.3
+        flat.append(([(ccx - r, ccy - r * 0.6, 0.0), (ccx + r, ccy - r * 0.6, 0.0),
+                      (ccx + r, ccy + r * 0.6, 0.0), (ccx - r, ccy + r * 0.6, 0.0)],
+                     _dark(base, 0.28)))
+
+    # entities near the agent (blob shadow first, then the lit body)
     for i, f in enumerate(world.foods):
         if f.active and abs(f.x - cx) < R and abs(f.y - cy) < R:
             z = 0.18 + 0.06 * math.sin(t * 3 + i)
+            _shadow(flat, world, f.x, f.y, 0.20)
             _cube(faces, f.x, f.y, z, 0.22, FOOD)
     for i, tool in enumerate(world.tools):
         if not tool.taken and abs(tool.x - cx) < R and abs(tool.y - cy) < R:
+            _shadow(flat, world, tool.x, tool.y, 0.38)
             _cube(faces, tool.x, tool.y, 0.1, 0.5, (120, 110, 96))     # pedestal
             z = 0.75 + 0.12 * math.sin(t * 2.5 + i)
             _cube(faces, tool.x, tool.y, z, 0.28, TOOL)
@@ -157,29 +233,45 @@ def _gather_faces(world, agents, eye, camera, t):
                  BEACON, tuple(int(c * pulse) for c in BEACON))
 
     for a in agents:
+        _shadow(flat, world, a.x, a.y, 0.5)
         if a.is_walker:
             _walker(faces, a, t)
         else:
             _rover(faces, a)
     for p in getattr(world, "predators", []):
+        _shadow(flat, world, p.x, p.y, 0.42)
         _alien(faces, p, t)
-    return faces
+    return flat, faces
 
 
 # ------------------------------------------------------------- primitives
+def _shadow(flat, world, x, y, r):
+    """Blob shadow: the ground colour beneath, darkened — reads as a soft
+    shadow on any terrain instead of a black hole."""
+    base = TERRAIN_COLORS[int(world.terrain_at(x, y))][0]
+    flat.append(([(x - r, y - r, 0.0), (x + r, y - r, 0.0),
+                  (x + r, y + r, 0.0), (x - r, y + r, 0.0)],
+                 _dark(base, 0.55)))
+
+
 def _box(faces, x, y, w, h, z0, z1, top, side):
     p = [(x, y), (x + w, y), (x + w, y + h), (x, y + h)]
     faces.append(([(p[0][0], p[0][1], z1), (p[1][0], p[1][1], z1),
-                   (p[2][0], p[2][1], z1), (p[3][0], p[3][1], z1)], top))
+                   (p[2][0], p[2][1], z1), (p[3][0], p[3][1], z1)],
+                  _shade(top, 0.0, 0.0, 1.0)))
+    # sides face -y, +x, +y, -x — four distinct Lambert tones
+    normals = ((0.0, -1.0), (1.0, 0.0), (0.0, 1.0), (-1.0, 0.0))
     for i in range(4):
         a, b = p[i], p[(i + 1) % 4]
+        nx, ny = normals[i]
         faces.append(([(a[0], a[1], z0), (b[0], b[1], z0),
-                       (b[0], b[1], z1), (a[0], a[1], z1)], side))
+                       (b[0], b[1], z1), (a[0], a[1], z1)],
+                      _shade(side, nx, ny, 0.0)))
 
 
 def _cube(faces, x, y, z, s, color):
     _box(faces, x - s / 2, y - s / 2, s, s, z - s / 2, z + s / 2, color,
-         tuple(int(c * 0.78) for c in color))
+         tuple(int(c * 0.85) for c in color))
 
 
 def _segment(faces, a, b, width, color):
@@ -210,16 +302,23 @@ def _segment(faces, a, b, width, color):
 
 
 def _obb(faces, cx, cy, fx, sy_, hf, hs, z0, z1, top, side):
-    """Oriented box: centre (cx,cy), axes f (facing) and s (side)."""
+    """Oriented box: centre (cx,cy), axes f (facing) and s (side); sides
+    shaded along their world normals (-s, +f, +s, -f)."""
     p = []
     for (df, ds) in ((-hf, -hs), (hf, -hs), (hf, hs), (-hf, hs)):
         p.append((cx + fx[0] * df + sy_[0] * ds, cy + fx[1] * df + sy_[1] * ds))
     faces.append(([(p[0][0], p[0][1], z1), (p[1][0], p[1][1], z1),
-                   (p[2][0], p[2][1], z1), (p[3][0], p[3][1], z1)], top))
+                   (p[2][0], p[2][1], z1), (p[3][0], p[3][1], z1)],
+                  _shade(top, 0.0, 0.0, 1.0)))
+    # sides face -s, +f, +s, -f (s = (-fy, fx) is passed in as sy_)
+    normals = ((-sy_[0], -sy_[1]), (fx[0], fx[1]),
+               (sy_[0], sy_[1]), (-fx[0], -fx[1]))
     for i in range(4):
         a, b = p[i], p[(i + 1) % 4]
+        nx, ny = normals[i]
         faces.append(([(a[0], a[1], z0), (b[0], b[1], z0),
-                       (b[0], b[1], z1), (a[0], a[1], z1)], side))
+                       (b[0], b[1], z1), (a[0], a[1], z1)],
+                      _shade(side, nx, ny, 0.0)))
 
 
 # ----------------------------------------------------------------- bodies
@@ -286,11 +385,29 @@ def _alien(faces, p, t):
 # ------------------------------------------------------------------ sky/fog
 def _sky(surf):
     W, H = surf.get_size()
-    steps = 24
+    steps = 36
     for i in range(steps):
         k = i / (steps - 1)
         col = tuple(int(SKY_TOP[j] + (SKY_HOR[j] - SKY_TOP[j]) * k) for j in range(3))
+        if k > 0.82:      # haze band melts into the fog colour at the horizon
+            hz = (k - 0.82) / 0.18
+            col = tuple(int(col[j] + (FOG[j] - col[j]) * hz) for j in range(3))
         pygame.draw.rect(surf, col, (0, int(i * H / steps), W, H // steps + 1))
+
+
+def _cloud_puffs(world, t):
+    """Deterministic drifting cloud positions (cx, cy, z, size)."""
+    puffs = []
+    for i in range(8):
+        h = _jit(i * 31 + 7, i * 17 + 3)
+        base_x = h * (world.w + 80.0) - 40.0
+        base_y = -20.0 + h * (world.h + 40.0)
+        z = 10.0 + h * 8.0
+        cx = ((base_x + t * (0.5 + h)) % (world.w + 80.0)) - 40.0
+        cy = base_y + 4.0 * math.sin(t * 0.05 + i)
+        puffs.append((cx, cy, z, 4.0 + h * 5.0))
+    return puffs
+
 
 
 def _fog_blend(color, f):

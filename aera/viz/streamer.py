@@ -39,7 +39,7 @@ h3{color:#8c8c87;font-weight:normal}
 class FrameStreamer:
     """Publish frames/events from the training thread; serve them via HTTP."""
 
-    def __init__(self, port: int = 8001, size=(426, 240), camera="chase"):
+    def __init__(self, port: int = 8001, size=(640, 360), camera="chase"):
         self.port = port
         self.size = size
         self.cam_mode = camera
@@ -136,7 +136,7 @@ class StreamViewer:
     .tick(env), .quit_requested and .chart.push so the trainer doesn't care
     which one is attached."""
 
-    def __init__(self, port: int = 8001, size=(426, 240), camera: str = "chase"):
+    def __init__(self, port: int = 8001, size=(640, 360), camera: str = "chase"):
         from .hud import Chart
         self.streamer = FrameStreamer(port, size, camera)
         self.streamer.start()
