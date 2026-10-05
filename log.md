@@ -469,3 +469,28 @@ reply to bytes before embedding it in the outer response payload breaks the
 mock with "Object of type bytes is not JSON serializable", which surfaces
 client-side as a generic fallback-to-explore. Keep JSON strings as strings
 until the single outer encode.
+
+**A/B verdict (300k, alien frontier, seed 0): the RuleMind did not help —
+yet.** Minded run: ret −8.6, 330 episodes; no-mind: ret −2.0, 389 episodes.
+Speed and foods were nearly identical (0.44/0.47 m/s, 0.47/0.53 foods); the
+minded run just accumulated less reward over fewer, longer episodes.
+Milestones tell the same story: Navigator@28 and Survivor@184 vs @14/@159
+without the mind. Goal distribution over 14,117 thoughts was sensible
+(explore 6.0k, forage 3.7k, flee 2.1k, craft 1.5k, navigate 0.7k, shelter
+0.1k) — the mind reasons fine; the problem is downstream. Three likely
+causes, in order of my confidence:
+1. **Learning capacity tax**: 6 extra obs inputs + a non-stationary goal
+   signal means the policy has MORE to learn with the same budget — at 300k
+   the no-mind policy simply has an optimization head start.
+2. **The rule mind's advice isn't better than the policy's own instincts**:
+   1.5k "craft" thoughts sent the agent chasing components while hungry.
+3. Return-shaping mismatch: dying costs −5, and goal switches mid-episode
+   (craft → forage) can waste scarce energy.
+
+What would change the verdict: budget parity (600k), enabling the goal slot
+only after basic skills exist (curriculum for the mind), an LLM whose
+judgment beats the rule thresholds, or rewarding goal FOLLOWING (give the
+policy bonus when executing the goal — makes the goal a commitment device
+rather than noise). The pipeline to test all four now exists: same seed,
+`--mind rule|llm|none`, one comparison chart. Verdict recorded honestly —
+a negative result with a working measurement pipeline is progress.
