@@ -24,8 +24,17 @@ from ..minds.base import GOALS
 from ..world.terrain import N_TERRAIN, Terrain
 from ..world.world import World
 
-INVENTORY_SLOTS = ("boots", "key", "lens", "grapple")   # reserved; v1 uses boots
-N_INVENTORY = len(INVENTORY_SLOTS)
+INVENTORY_SLOTS = ("boots", "key", "lens", "grapple")   # legacy 4-flag layout
+CRAFT_SLOTS = ("boots", "scrap", "crystal", "plank",
+               "shield", "lantern", "flare")            # crafting worlds
+
+
+def inventory_slots(cfg: AgentCfg) -> tuple:
+    return CRAFT_SLOTS if cfg.craft_sense else INVENTORY_SLOTS
+
+
+def n_inventory(cfg: AgentCfg) -> int:
+    return len(inventory_slots(cfg))
 
 
 def action_dim(kind: str) -> int:
@@ -51,14 +60,14 @@ def ray_channels(cfg: AgentCfg) -> int:
 
 def obs_dim(cfg: AgentCfg) -> int:
     return (cfg.view_rays * ray_channels(cfg) + proprio_dim(cfg) + 9 * N_TERRAIN
-            + N_INVENTORY + (3 if cfg.scent else 0) + 3
+            + n_inventory(cfg) + (3 if cfg.scent else 0) + 3
             + (4 if cfg.threat_sense else 0)
             + (len(GOALS) if cfg.mind_goal else 0))
 
 
 def obs_layout(cfg: AgentCfg) -> list[tuple[str, int]]:
     seg = [("rays", cfg.view_rays * ray_channels(cfg)), ("proprio", proprio_dim(cfg)),
-           ("terrain3x3", 9 * N_TERRAIN), ("inventory", N_INVENTORY)]
+           ("terrain3x3", 9 * N_TERRAIN), ("inventory", n_inventory(cfg))]
     if cfg.scent:
         seg.append(("scent", 3))
     seg.append(("beacon", 3))
@@ -125,10 +134,10 @@ def build_obs(agent, world: World, cfg: AgentCfg) -> np.ndarray:
             base += N_TERRAIN
     o += 9 * N_TERRAIN
 
-    # ---- inventory -----------------------------------------------------------
-    for k, name in enumerate(INVENTORY_SLOTS):
+    # ---- inventory (boots/components/crafted, layout per craft_sense) ------
+    for k, name in enumerate(inventory_slots(cfg)):
         out[o + k] = 1.0 if name in agent.inventory else 0.0
-    o += N_INVENTORY
+    o += n_inventory(cfg)
 
     # ---- scent (reward-as-observation: direction to nearest food) ----------
     if cfg.scent:

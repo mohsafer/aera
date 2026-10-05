@@ -35,6 +35,8 @@ class EntitiesCfg:
     predators: int = 0             # scripted aliens (chase + bite)
     predator_speed: float = 1.1
     predator_damage: float = 6.0   # hp per bite
+    workbenches: int = 0           # crafting stations
+    components: list = field(default_factory=list)  # ["scrap", "crystal", ...]
 
 
 @dataclass
@@ -77,6 +79,7 @@ class AgentCfg:
     scent: bool = True            # include direction-to-nearest-food in obs
     threat_sense: bool = False    # predator ray flag + fear block (v0.3 worlds)
     mind_goal: bool = False       # goal one-hot slot for the Mind layer (v0.3)
+    craft_sense: bool = False     # extended inventory flags (components+crafts)
 
 
 @dataclass

@@ -34,6 +34,8 @@ class MilestoneTracker:
         # (see env._episode_stats) — body-agnostic; raw explored stays logged
         "Explorer": lambda s, kind: s["explored_norm"] >= 0.15,
         "ToolUser": lambda s, kind: "boots" in s["inventory"] and "jumped" in s["events"],
+        "Engineer": lambda s, kind: any(k in s["inventory"]
+                                        for k in ("shield", "lantern", "flare")),
         "Navigator": lambda s, kind: s["beacon"],
     }
 

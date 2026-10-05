@@ -12,7 +12,7 @@ import math
 import numpy as np
 
 from ..config import WorldCfg
-from .entities import Beacon, Food, Predator, Tool, place_free
+from .entities import Beacon, Food, Predator, Tool, Workbench, place_free
 from .terrain import Terrain, TerrainGrid
 
 
@@ -45,6 +45,7 @@ class World:
         self.foods: list[Food] = []
         self.tools: list[Tool] = []
         self.predators: list[Predator] = []
+        self.workbenches: list[Workbench] = []
         self.beacon: Beacon | None = None
         self.wind = (0.0, 0.0)   # drift (m/s) applied by integrate; anomalies
         self._spawn_entities()
@@ -60,6 +61,14 @@ class World:
             spots = place_free(1, self, self.rng, min_spawn_dist=0.0)
             if spots:
                 self.tools.append(Tool(x=spots[0][0], y=spots[0][1], kind=kind))
+        for kind in e.components:
+            spots = place_free(1, self, self.rng, min_spawn_dist=0.0)
+            if spots:
+                self.tools.append(Tool(x=spots[0][0], y=spots[0][1], kind=kind))
+        for _ in range(e.workbenches):
+            spots = place_free(1, self, self.rng, min_spawn_dist=3.0)
+            if spots:
+                self.workbenches.append(Workbench(x=spots[0][0], y=spots[0][1]))
         for _ in range(e.predators):
             spots = place_free(1, self, self.rng, min_spawn_dist=4.0)
             if spots:
@@ -96,7 +105,10 @@ class World:
                 d = math.hypot(a.x - p.x, a.y - p.y)
                 if d < td:
                     tx, ty, td = a.x, a.y, d
-            if tx is not None and td < p.aggro_range:
+            if tick < p.fear_until and tx is not None:
+                p.heading = math.atan2(p.y - ty, p.x - tx)   # flee the flare
+                step = 1.2 * p.speed * dt
+            elif tx is not None and td < p.aggro_range:
                 p.heading = math.atan2(ty - p.y, tx - p.x)
                 step = p.speed * dt
             else:

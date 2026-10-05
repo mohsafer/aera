@@ -52,6 +52,11 @@ ROVER = (196, 84, 72)
 TIRE = (44, 44, 50)
 ALIEN = (70, 150, 80)
 ALIEN_EYE = (230, 60, 50)
+BENCH = (110, 78, 48)
+SCRAP = (128, 128, 136)
+CRYSTAL = (80, 200, 230)
+PLANK = (156, 96, 54)
+KIND_COLORS = {"boots": TOOL, "scrap": SCRAP, "crystal": CRYSTAL, "plank": PLANK}
 
 LIGHT = (0.45, -0.5, -0.75)   # direction *to* the light (z-up world)
 NEAR = 0.18
@@ -205,6 +210,8 @@ def _gather_faces(world, agents, eye, camera, t):
 
     # drifting cloud shadows: ground-darkened quads under each puff
     for (ccx, ccy, _z, cs) in _cloud_puffs(world, t):
+        if not (0 <= ccx <= world.w and 0 <= ccy <= world.h):
+            continue          # off-map shadows would float against the sky
         scx2 = min(world.w - 1, max(0, int(ccx)))
         scy2 = min(world.h - 1, max(0, int(ccy)))
         base = TERRAIN_COLORS[int(world.terrain_at(scx2, scy2))][0]
@@ -221,10 +228,19 @@ def _gather_faces(world, agents, eye, camera, t):
             _cube(faces, f.x, f.y, z, 0.22, FOOD)
     for i, tool in enumerate(world.tools):
         if not tool.taken and abs(tool.x - cx) < R and abs(tool.y - cy) < R:
-            _shadow(flat, world, tool.x, tool.y, 0.38)
-            _cube(faces, tool.x, tool.y, 0.1, 0.5, (120, 110, 96))     # pedestal
-            z = 0.75 + 0.12 * math.sin(t * 2.5 + i)
-            _cube(faces, tool.x, tool.y, z, 0.28, TOOL)
+            kind_col = KIND_COLORS.get(tool.kind, TOOL)
+            _shadow(flat, world, tool.x, tool.y, 0.38 if tool.kind == "boots" else 0.22)
+            if tool.kind == "boots":
+                _cube(faces, tool.x, tool.y, 0.1, 0.5, (120, 110, 96))  # pedestal
+                z = 0.75 + 0.12 * math.sin(t * 2.5 + i)
+            else:
+                z = 0.12 + 0.05 * math.sin(t * 3.0 + i)   # components sit low
+            _cube(faces, tool.x, tool.y, z, 0.28, kind_col)
+    for wb in getattr(world, "workbenches", []):
+        if abs(wb.x - cx) < R and abs(wb.y - cy) < R:
+            _shadow(flat, world, wb.x, wb.y, 0.55)
+            _box(faces, wb.x - 0.45, wb.y - 0.30, 0.9, 0.6, 0.0, 0.55,
+                 BENCH, tuple(int(c * 0.7) for c in BENCH))
     if world.beacon is not None and world.beacon.x > -1:
         b = world.beacon
         if abs(b.x - cx) < R + 6 and abs(b.y - cy) < R + 6:

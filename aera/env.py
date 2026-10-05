@@ -20,7 +20,7 @@ from .agents.senses import action_dim, build_obs, obs_dim
 from .config import Config
 from .gym_compat import HAS_GYM, gym, spaces
 from .world.anomalies import AnomalyDirector
-from .world.entities import place_free
+from .world.entities import RECIPES, place_free
 from .world.physics import integrate
 from .world.terrain import Terrain
 from .world.world import World
@@ -166,12 +166,34 @@ class AeraEnv(gym.Env):
                 sub["food"] = rw.w_food
                 events.append("found food")
 
-        # tools
+        # tools + crafting components
         for tool in w.tools:
             if not tool.taken and math.hypot(tool.x - a.x, tool.y - a.y) < 0.7:
                 tool.taken = True
                 a.inventory.add(tool.kind)
                 events.append(f"picked up {tool.kind}!")
+
+        # workbench: stand close with the right components → auto-craft
+        for wb in w.workbenches:
+            if math.hypot(wb.x - a.x, wb.y - a.y) > 1.2:
+                continue
+            for product, comps in RECIPES.items():
+                if product in a.inventory:
+                    continue
+                if all(c in a.inventory for c in comps):
+                    for c in comps:
+                        a.inventory.discard(c)
+                    a.inventory.add(product)
+                    events.append(f"crafted {product}!")
+                    break
+
+        # flare (consumable): a close predator scatters every predator nearby
+        if "flare" in a.inventory and any(
+                math.hypot(p.x - a.x, p.y - a.y) < 3.0 for p in w.predators):
+            a.inventory.discard("flare")
+            for p in w.predators:
+                p.fear_until = w.tick + 60
+            events.append("flare! the aliens scatter")
 
         # beacon
         if w.beacon is not None and not w.beacon.hit:
@@ -186,6 +208,8 @@ class AeraEnv(gym.Env):
                 continue
             if math.hypot(p.x - a.x, p.y - a.y) < 0.7:
                 bite = cfg.world.entities.predator_damage
+                if "shield" in a.inventory:
+                    bite *= 0.5
                 a.health = max(0.0, a.health - bite)
                 sub["damage"] -= rw.w_damage * bite
                 p.stun_until = w.tick + 30

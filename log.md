@@ -404,3 +404,33 @@ treatment. What the demo shows today: a random-policy walker with a RuleMind
 (ports 8888 training / 8889 mind demo). What it doesn't show yet: the goals
 *helping* — a random policy can't execute "flee". The honest test is a
 goal-conditioned policy trained WITH the mind — next increment.
+
+---
+
+## 2026-10-02 — crafting: the agent can now build its own protection
+
+v0.3b. Components (scrap / crystal / plank) scatter like tools; one
+workbench per crafting world; stand within 1.2 m holding a recipe's
+components and the product crafts automatically — no new action channel,
+so the whole thing stays learnable by the same PPO and SB3 setups.
+
+Recipes (`world/entities.py::RECIPES`, distinct components because the
+inventory is a set):
+- **shield** = scrap + crystal — halves alien bites, cuts storm wind to 30%
+  and quake kicks to a third (applied in `integrate`/`_consequences`).
+- **lantern** = crystal + plank — fog loses its power: the director's
+  sensor-noise is zeroed while held.
+- **flare** = plank + scrap — consumable: when a predator closes within 3 m
+  it pops automatically and every alien flees for 6 s (`fear_until`).
+
+Design choices: crafting is *proximity-triggered*, not an action — the
+decision the agent learns is which components to pick up and where to go.
+Components are just `Tool` entities (pickup code already generic), and the
+new **Engineer** milestone fires on holding any crafted item. The extended
+inventory block (boots/scrap/crystal/plank/shield/lantern/flare = 7 flags)
+is gated behind `agent.craft_sense` so every existing checkpoint keeps its
+obs layout. `configs/field_alien.json` is the full v0.3 world: anomalies +
+predators + workbench + components + craft/threat senses.
+
+Also fixed while verifying: cloud shadows for puffs beyond the map edge
+painted floating slabs in the sky — clamped to the map.

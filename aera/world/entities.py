@@ -18,8 +18,28 @@ class Food:
 class Tool:
     x: float
     y: float
-    kind: str                   # "boots" unlocks the jump action channel
-    taken: bool = False
+    kind: str                   # "boots" unlocks the jump action channel;
+    taken: bool = False         # component kinds (scrap/crystal/plank) feed
+                                # workbench recipes
+
+
+@dataclass
+class Workbench:
+    """Crafting station: stand next to it with the right components and the
+    recipe crafts automatically (see world/entities.py::RECIPES)."""
+    x: float
+    y: float
+
+
+# product → required components (distinct kinds; consumed on craft).
+# Held in the agent's inventory set, so recipes use distinct components.
+RECIPES = {
+    "shield": ("scrap", "crystal"),   # halves quake/wind kicks and alien bites
+    "lantern": ("crystal", "plank"),  # cancels fog: rays stay clean
+    "flare": ("plank", "scrap"),      # consumable: scares predators away
+}
+CRAFTED = tuple(RECIPES)
+COMPONENTS = ("scrap", "crystal", "plank")
 
 
 @dataclass
@@ -34,6 +54,7 @@ class Predator:
     aggro_range: float = 6.0
     stun_until: int = -1
     wander_until: int = 0
+    fear_until: int = -1             # flare effect: run away until this tick
 
 
 @dataclass

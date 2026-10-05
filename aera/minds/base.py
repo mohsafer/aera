@@ -49,6 +49,9 @@ def build_summary(env) -> dict:
     for t in w.tools:
         if not t.taken:
             d_tool = min(d_tool, math.hypot(t.x - a.x, t.y - a.y))
+    d_bench = math.inf
+    for wb in getattr(w, "workbenches", []):
+        d_bench = min(d_bench, math.hypot(wb.x - a.x, wb.y - a.y))
     return {
         "step": env.steps,
         "kind": a.kind,
@@ -58,6 +61,9 @@ def build_summary(env) -> dict:
         "foods_eaten": a.foods_eaten,
         "nearest_food_dist": None if d_food is None else round(d_food, 1),
         "nearest_tool_dist": None if d_tool is math.inf else round(d_tool, 1),
+        "nearest_workbench_dist": None if d_bench is math.inf else round(d_bench, 1),
+        "components_held": len([i for i in a.inventory
+                                if i in ("scrap", "crystal", "plank")]),
         "nearest_threat_dist": None if threat is math.inf else round(threat, 1),
         "n_threats": len(w.predators),
         "beacon_dist": None if beacon_d is math.inf else round(beacon_d, 1),
@@ -97,6 +103,10 @@ class RuleMind(Mind):
                 and summary.get("nearest_tool_dist") is not None
                 and summary.get("nearest_tool_dist") < 8.0):
             return Thought("craft", "tool nearby — gear up")
+        if (summary.get("components_held", 0) >= 2
+                and summary.get("nearest_workbench_dist") is not None
+                and summary["nearest_workbench_dist"] < 8.0):
+            return Thought("craft", "components + bench — build protection")
         bd = summary["beacon_dist"]
         if bd is not None and bd < 6.0:
             return Thought("navigate", f"beacon {bd}m — finish the job")

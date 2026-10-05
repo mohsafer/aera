@@ -93,6 +93,8 @@ def integrate(agent, world: World, dt: float) -> None:
         speed_mult = max(speed_mult, 1.3)   # a leap clears pits and mud
     dist = agent.v * speed_mult * dt
     wx, wy = world.wind                      # anomaly drift (storm gusts)
+    if "shield" in agent.inventory:          # crafted protection vs storms
+        wx, wy = wx * 0.3, wy * 0.3
     dx = math.cos(agent.heading) * dist + wx * dt
     dy = math.sin(agent.heading) * dist + wy * dt
     agent.x, agent.y = world.move_circle(agent.x, agent.y, dx, dy,

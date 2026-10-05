@@ -132,6 +132,9 @@ class AnomalyDirector:
                 wx += eff.data["mag"] * gust * math.cos(eff.data["ang"])
                 wy += eff.data["mag"] * gust * math.sin(eff.data["ang"])
             elif eff.kind == "fog":
+                # lantern (crafted) keeps vision clean through any fog
+                if "lantern" in agent.inventory:
+                    continue
                 # one pre-drawn bias per step: deterministic, no rng in senses
                 self.obs_noise = eff.data["sigma"] * float(self.rng.standard_normal())
             elif eff.kind == "famine":
@@ -140,8 +143,11 @@ class AnomalyDirector:
                         f.active = False
                         f.respawn_at = -1
             elif eff.kind == "quake":
-                agent.v = min(2.6, agent.v + eff.data["mag"] * 0.3)
-                agent.heading += float(self.rng.uniform(-0.3, 0.3))
+                shielded = "shield" in agent.inventory
+                boost = eff.data["mag"] * (0.1 if shielded else 0.3)
+                agent.v = min(2.6, agent.v + boost)
+                agent.heading += float(self.rng.uniform(-0.09, 0.09) if shielded
+                                       else self.rng.uniform(-0.3, 0.3))
         world.wind = (wx, wy)
 
     def _expire(self, eff: _Effect, world, agent, events: list[str]) -> None:
