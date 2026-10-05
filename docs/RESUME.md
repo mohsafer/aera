@@ -58,7 +58,7 @@ lower `--save-every` via Trainer for finer checkpoints). Watch it live via
 
 | run | state | note |
 |---|---|---|
-| `walker_field_anomalies_s0` | PAUSED 137k/300k, resumable | alien world; Explorer@14, Navigator@14, ToolUser@16 |
+| `walker_field_anomalies_s0` | **COMPLETE 300k** | alien frontier: ret −2 vs +34 clean, speed 0.46 vs 0.73 m/s, foods 0.5 vs 8.2 — anomalies make the task ~2× harder; Survivor@159; comparison chart `comparison_alien_vs_clean.png` + `demo.gif` in the run dir |
 | `walker_field_open_s0` | complete 600k | ret ~41, 0.75 m/s, 6/6 milestones (Walking@271) |
 | `walker_field_open_s0_warm400k` | complete (+400k) | ret ~44 via foraging; speed plateaued |
 | `walker_field_open_s0_warm400k_diverged` | evidence | NaN war story (log.md) |
@@ -73,6 +73,15 @@ lower `--save-every` via Trainer for finer checkpoints). Watch it live via
 + counts) when thought records exist. The honest test that reasoning helps:
 same seed, `--mind rule` vs `--mind none`, compare returns; then LLMMind
 (export `AERA_LLM_URL`, `AERA_LLM_MODEL`) once an endpoint is chosen.
+
+## The headline comparison
+
+`runs/walker_field_anomalies_s0/comparison_alien_vs_clean.png`: the same
+walker architecture on the clean field (600k) reaches ret ~40 at 0.75 m/s;
+on the alien frontier (300k, all anomalies + predator) it hovers at ~0 with
+0.46 m/s — it survives and navigates but foraging stays hard. Natural next
+experiments: train the alien world with `--mind rule` (goal-conditioned) and
+with crafting emphasis, or resume the alien run to 600k for parity.
 
 ## Housekeeping
 
