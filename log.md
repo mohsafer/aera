@@ -434,3 +434,38 @@ predators + workbench + components + craft/threat senses.
 
 Also fixed while verifying: cloud shadows for puffs beyond the map edge
 painted floating slabs in the sky — clamped to the map.
+
+---
+
+## 2026-10-02 — RL+LLM v2: event-driven thoughts, memory, and the honest A/B
+
+Three upgrades to the minds layer, each pulling toward "reasoning that
+actually matters":
+
+1. **Event-driven thinking.** A fixed timer is the wrong shape for a change
+   of thought — a predator at 1 m can't wait 25 steps. The hook now thinks on
+   three triggers: episode start, timer (interval), and URGENT (predator
+   within 2.5 m or standing on lava, re-thinks at most every 5 steps). Goals
+   are sticky between thoughts. First implementation gated urgent re-thinks
+   by `interval/2` — which made urgent thinks slower than the timer at small
+   intervals; fixed with a flat 5-step urgent cadence.
+2. **LLMMind with memory + reproducibility.** The prompt now carries the
+   PREVIOUS thought and the events since it — the model can reason about a
+   *change* of situation instead of re-deciding from scratch. Replies are
+   cached by (model, summary) into `mind_cache.json` per run: a replay
+   reuses answers instead of re-calling the endpoint, which makes LLM runs
+   effectively reproducible offline (recorded-then-cached ≈ deterministic).
+   The world summary gained `anomalies_active`, `cell`/`on_lava`, and
+   `episode_return`. Also: mind HTTP calls explicitly bypass the system
+   proxy — http_proxy env vars silently broke calls to localhost endpoints
+   (RemoteDisconnected from a handler that never saw the request).
+3. **The A/B is running.** Alien world, seed 0, `--mind rule` (goal-
+   conditioned policy) vs the completed no-mind run at the same seed — the
+   comparison chart script makes the verdict one PNG. Mock-endpoint tests
+   cover the full LLM path (request → parse → goal → cache) without network.
+
+Test-handler bug worth remembering: `json.dumps(bytes)` — encoding the inner
+reply to bytes before embedding it in the outer response payload breaks the
+mock with "Object of type bytes is not JSON serializable", which surfaces
+client-side as a generic fallback-to-explore. Keep JSON strings as strings
+until the single outer encode.

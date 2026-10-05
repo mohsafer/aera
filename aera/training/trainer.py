@@ -5,6 +5,7 @@ Mind (rule or LLM) that thinks every K steps and conditions the policy.
 from __future__ import annotations
 
 import json
+import math
 import os
 import time
 from collections import deque
@@ -15,23 +16,30 @@ from ..agents.senses import action_dim, obs_dim
 from ..env import AeraEnv
 from ..minds.base import LLMMind, Mind, RuleMind, build_summary
 from ..rl.ppo_numpy import PPO
+from ..world.terrain import Terrain
 from .metrics import JsonlLogger, MilestoneTracker
 
 
-def make_mind(kind: str, endpoint: str | None) -> Mind | None:
+def make_mind(kind: str, endpoint: str | None,
+              cache_path: str | None = None) -> Mind | None:
     if kind in ("none", "", None):
         return None
     if kind == "rule":
         return RuleMind()
     if kind == "llm":
-        return LLMMind(url=endpoint)
+        return LLMMind(url=endpoint, cache_path=cache_path)
     raise ValueError(f"unknown mind kind: {kind}")
 
 
 class MindHook:
-    """Thinks every `interval` env steps; publishes the thought to the event
-    feed (streamer/HUD), the agent's goal slot, and metrics.jsonl. The feed
-    line is held until AFTER env.step — step() replaces last_events."""
+    """Thinks when the situation may have changed, not just on a timer:
+    every `interval` steps, immediately when a threat closes in or the agent
+    stands on lava (at half cadence, to avoid spam), and at every episode
+    start. The goal is held between thoughts; events since the last thought
+    are handed to the mind as context (LLM continuity). Feed lines are held
+    until AFTER env.step — step() replaces last_events."""
+
+    URGENT_CADENCE = 5    # urgent re-thinks at most every 5 steps (0.5 s)
 
     def __init__(self, mind: Mind, interval: int, logger: JsonlLogger):
         self.mind = mind
@@ -39,19 +47,42 @@ class MindHook:
         self.logger = logger
         self.count = 0
         self.pending: list[str] = []
+        self.since_last: list[str] = []
+        self.last_think_step = -10 ** 9
+        self.last_episode = -1
+
+    @staticmethod
+    def _urgent(env: AeraEnv) -> bool:
+        for p in env.world.predators:
+            if math.hypot(p.x - env.agent.x, p.y - env.agent.y) < 2.5:
+                return True
+        return env.world.terrain_at(env.agent.x, env.agent.y) == Terrain.LAVA
 
     def before_act(self, env: AeraEnv, global_step: int) -> None:
-        if env.steps % self.interval:
+        self.since_last.extend(env.last_events)
+        self.since_last = self.since_last[-10:]
+        new_episode = env.episode != self.last_episode
+        if new_episode:
+            self.last_episode = env.episode
+            self.mind.reset()
+            self.since_last.clear()
+            self.last_think_step = -10 ** 9
+        since = env.steps - self.last_think_step
+        urgent = self._urgent(env) and since >= self.URGENT_CADENCE
+        if not (new_episode or urgent or since >= self.interval):
             return
         summary = build_summary(env)
-        thought = self.mind.decide(summary)
+        context = self.since_last[-5:]
+        thought = self.mind.decide(summary, since_last=context)
+        self.since_last = []
+        self.last_think_step = env.steps
         env.agent.goal = thought.goal
         self.pending.append(f"★ THOUGHT: {thought.goal} — {thought.rationale}")
         self.count += 1
         self.logger.log({"type": "thought", "step": global_step,
                          "mind": self.mind.name, "episode": env.episode,
                          "goal": thought.goal, "rationale": thought.rationale,
-                         "summary": summary})
+                         "urgent": urgent, "summary": summary})
 
     def flush(self, env: AeraEnv) -> None:
         if self.pending:

@@ -69,10 +69,11 @@ def main(argv=None) -> str:
 
     print(f"AERA training → {out}  (agent={config.agent.kind}, "
           f"world={config.world.name}, steps={args.steps}, mind={args.mind})")
+    cache = (os.path.join(out, "mind_cache.json") if args.mind == "llm" else None)
     Trainer(config, out, total_steps=args.steps, rollout=args.rollout,
             seed=args.seed, viewer=viewer, init_from=args.init,
             lr=args.lr, resume_from=args.resume,
-            mind=make_mind(args.mind, args.mind_endpoint),
+            mind=make_mind(args.mind, args.mind_endpoint, cache_path=cache),
             mind_interval=args.mind_interval).train()
     return out
 
