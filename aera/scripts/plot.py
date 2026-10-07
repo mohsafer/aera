@@ -157,7 +157,7 @@ def plot_run(run_dir: str, window: int = 15) -> list[str]:
         thought_recs = _load_thoughts(jl_full)
         if thought_recs:
             out_mind = os.path.join(run_dir, "curves_mind.png")
-            _plot_mind(out_mind, thought_recs)
+            _plot_mind(out_mind, thought_recs, _load_goal_stats(jl_full))
             written.append(out_mind)
 
     return written
@@ -176,7 +176,49 @@ def _load_thoughts(path: str) -> list[dict]:
     return out
 
 
-def _plot_mind(out_path: str, thoughts: list[dict]) -> None:
+def _load_goal_stats(path: str) -> list[dict]:
+    out = []
+    with open(path, "r", encoding="utf-8") as f:
+        for line in f:
+            try:
+                rec = json.loads(line)
+            except json.JSONDecodeError:
+                continue
+            if rec.get("type") == "goal_stat" and rec.get("steps", 0) >= 10:
+                out.append(rec)
+    return out
+
+
+def _plot_goal_stats(ax, stats: list[dict]) -> None:
+    """Per-goal behavior: foods and damage per 100 steps — does behavior
+    actually differ between goals?"""
+    from collections import defaultdict
+    agg = defaultdict(lambda: [0, 0, 0.0])   # goal → [steps, foods, damage]
+    for r in stats:
+        a = agg[r["goal"]]
+        a[0] += r["steps"]
+        a[1] += r.get("foods", 0)
+        a[2] += r.get("damage", 0.0)
+    goals = sorted(agg)
+    foods = [100 * agg[g][1] / agg[g][0] for g in goals]
+    dmg = [100 * agg[g][2] / agg[g][0] for g in goals]
+    x = range(len(goals))
+    w = 0.38
+    ax.bar([i - w / 2 for i in x], foods, w, color="#2f7d32", label="foods/100 steps")
+    ax2 = ax.twinx()
+    ax2.bar([i + w / 2 for i in x], dmg, w, color="#c45448", label="damage/100 steps")
+    ax2.set_ylabel("damage / 100 steps", fontsize=8, color="#c45448")
+    ax2.tick_params(labelsize=8)
+    ax.set_xticks(list(x))
+    ax.set_xticklabels(goals, fontsize=8)
+    ax.set_ylabel("foods / 100 steps", fontsize=8, color="#2f7d32")
+    ax.set_title("behavior per goal (does the goal change what the body does?)",
+                 fontsize=9)
+    ax.tick_params(labelsize=8)
+
+
+def _plot_mind(out_path: str, thoughts: list[dict],
+               goal_stats: list[dict] | None = None) -> None:
     import matplotlib
     matplotlib.use("Agg")
     import matplotlib.pyplot as plt
@@ -184,7 +226,8 @@ def _plot_mind(out_path: str, thoughts: list[dict]) -> None:
 
     goals = [t.get("goal", "?") for t in thoughts]
     counts = Counter(goals)
-    fig, axes = plt.subplots(1, 2, figsize=(11, 3.6))
+    ncol = 3 if goal_stats else 2
+    fig, axes = plt.subplots(1, ncol, figsize=(5.5 * ncol, 3.6))
     fig.suptitle("mind audit — thoughts", fontsize=12)
     steps = [t.get("step", i) for i, t in enumerate(thoughts)]
     ids = {g: i for i, g in enumerate(sorted(set(goals)))}
@@ -197,6 +240,8 @@ def _plot_mind(out_path: str, thoughts: list[dict]) -> None:
     axes[1].barh(list(counts.keys()), [counts[g] for g in counts], color="#20242c")
     axes[1].set_title("thought count per goal", fontsize=10)
     axes[1].tick_params(labelsize=8)
+    if goal_stats:
+        _plot_goal_stats(axes[2], goal_stats)
     fig.tight_layout()
     fig.savefig(out_path, dpi=130)
     plt.close(fig)

@@ -52,6 +52,14 @@ class MindHook:
         self.since_last: list[str] = []
         self.last_think_step = -10 ** 9
         self.last_episode = -1
+        # per-goal behavior telemetry (the mind audit's raw data)
+        self.seg_goal = "explore"
+        self.seg_steps = 0
+        self.seg_foods = 0
+        self.seg_damage = 0.0
+        self.seg_threat_sum = 0.0
+        self.seg_health = None
+        self.seg_foods_end = 0
 
     @staticmethod
     def _urgent(env: AeraEnv) -> bool:
@@ -59,6 +67,17 @@ class MindHook:
             if math.hypot(p.x - env.agent.x, p.y - env.agent.y) < 2.5:
                 return True
         return env.world.terrain_at(env.agent.x, env.agent.y) == Terrain.LAVA
+
+    def _close_segment(self, env: AeraEnv) -> None:
+        """Emit behavior stats for the finished goal segment."""
+        if self.seg_steps > 0:
+            self.logger.log({
+                "type": "goal_stat", "episode": self.last_episode,
+                "goal": self.seg_goal, "steps": self.seg_steps,
+                "foods": self.seg_foods_end - self.seg_foods,
+                "damage": round(max(0.0, self.seg_damage), 2),
+                "threat_dist_mean": round(
+                    self.seg_threat_sum / self.seg_steps, 2)})
 
     def before_act(self, env: AeraEnv, global_step: int) -> None:
         if global_step < self.start:
@@ -68,6 +87,10 @@ class MindHook:
         self.since_last = self.since_last[-10:]
         new_episode = env.episode != self.last_episode
         if new_episode:
+            self._close_segment(env)
+            self.seg_steps = 0
+            self.seg_foods = env.agent.foods_eaten
+            self.seg_health = env.agent.health
             self.last_episode = env.episode
             self.mind.reset()
             self.since_last.clear()
@@ -81,6 +104,12 @@ class MindHook:
         thought = self.mind.decide(summary, since_last=context)
         self.since_last = []
         self.last_think_step = env.steps
+        if thought.goal != self.seg_goal and self.seg_steps > 0:
+            self._close_segment(env)
+            self.seg_steps = 0
+            self.seg_foods = env.agent.foods_eaten
+            self.seg_health = env.agent.health
+        self.seg_goal = thought.goal
         env.agent.goal = thought.goal
         self.pending.append(f"★ THOUGHT: {thought.goal} — {thought.rationale}")
         self.count += 1
@@ -93,6 +122,14 @@ class MindHook:
         if self.pending:
             env.last_events.extend(self.pending)
             self.pending.clear()
+        # per-step telemetry for the open goal segment
+        self.seg_steps += 1
+        self.seg_foods_end = env.agent.foods_eaten
+        if self.seg_health is not None:
+            self.seg_damage += max(0.0, self.seg_health - env.agent.health)
+        self.seg_health = env.agent.health
+        for p in env.world.predators:
+            self.seg_threat_sum += math.hypot(p.x - env.agent.x, p.y - env.agent.y)
 
 
 class Trainer:
