@@ -92,6 +92,8 @@ class RewardCfg:
     w_death: float = 5.0
     w_beacon: float = 10.0
     beacon_terminates: bool = False
+    w_goal: float = 0.25          # per-step goal-following bonus (Mind layer;
+                                  # active only when agent.mind_goal is set)
 
 
 @dataclass

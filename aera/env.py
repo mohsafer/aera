@@ -55,6 +55,8 @@ class AeraEnv(gym.Env):
         self.ep_events: list[str] = []
         self.last_events: list[str] = []   # per-step events (HUD feed)
         self._prev_food_dist: float | None = None
+        self._prev_threat_dist: float | None = None
+        self._prev_beacon_dist: float | None = None
         self._last_damage_tick = -99
 
     # -------------------------------------------------------------- helpers
@@ -81,6 +83,8 @@ class AeraEnv(gym.Env):
         self.ep_events.clear()
         self.last_events = []
         self._prev_food_dist = None
+        self._prev_threat_dist = None
+        self._prev_beacon_dist = None
         self.agent.record_cell()
         obs = build_obs(self.agent, self.world, self.config.agent)
         return obs, self._info([])
@@ -217,12 +221,57 @@ class AeraEnv(gym.Env):
 
         # survival + progress shaping
         sub["survive"] = rw.w_survive * dt
-        d, _ = self._nearest_active_food()
-        if d is not None:
-            if self._prev_food_dist is not None:
-                sub["progress"] = rw.w_progress * (self._prev_food_dist - d)
-            self._prev_food_dist = d
+        d_food, _ = self._nearest_active_food()
+        prev_food = self._prev_food_dist
+        if d_food is not None:
+            if prev_food is not None:
+                sub["progress"] = rw.w_progress * (prev_food - d_food)
+            self._prev_food_dist = d_food
+
+        # goal-following shaping: pay the policy for EXECUTING the mind's
+        # current goal — makes the goal a commitment device, not noise
+        if cfg.agent.mind_goal and rw.w_goal > 0:
+            d_threat = min((math.hypot(p.x - a.x, p.y - a.y)
+                            for p in w.predators), default=None)
+            d_beacon = (math.hypot(w.beacon.x - a.x, w.beacon.y - a.y)
+                        if w.beacon is not None and not w.beacon.hit else None)
+            sub["goal"] = rw.w_goal * self._goal_match(
+                a, w, sub, events, d_food, prev_food, d_threat, d_beacon)
+            self._prev_threat_dist = d_threat
+            self._prev_beacon_dist = d_beacon
         return sub
+
+    def _goal_match(self, a, w, sub, events, d_food, prev_food,
+                    d_threat, d_beacon) -> float:
+        """1.0 when this step's outcome agrees with the current goal."""
+        g = a.goal
+        if g == "forage":
+            if d_food is not None and prev_food is not None \
+                    and d_food < prev_food - 1e-6:
+                return 1.0
+        elif g == "flee":
+            if d_threat is None:
+                return 1.0                      # escaped — no threats left
+            prev = self._prev_threat_dist
+            if prev is not None and d_threat > prev + 1e-6:
+                return 1.0
+        elif g == "navigate":
+            if d_beacon is None:
+                return 1.0                      # beacon reached
+            prev = self._prev_beacon_dist
+            if prev is not None and d_beacon < prev - 1e-6:
+                return 1.0
+        elif g == "explore":
+            return 1.0 if sub["novelty"] > 0 else 0.0
+        elif g == "shelter":
+            return 1.0 if sub["damage"] >= 0 else 0.0
+        elif g == "craft":
+            for e in events:
+                if "crafted" in e or ("picked up" in e and
+                                      any(c in e for c in
+                                          ("scrap", "crystal", "plank"))):
+                    return 1.0
+        return 0.0
 
     def _nearest_active_food(self):
         bd, ba = math.inf, None

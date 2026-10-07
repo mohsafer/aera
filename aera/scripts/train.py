@@ -44,6 +44,9 @@ def main(argv=None) -> str:
                         "'llm' = OpenAI-compatible endpoint (AERA_LLM_URL)")
     p.add_argument("--mind-interval", type=int, default=25,
                    help="env steps between thoughts (25 = every 2.5 s)")
+    p.add_argument("--mind-start", type=int, default=0, metavar="N",
+                   help="mind curriculum: stay silent (constant explore goal) "
+                        "until env step N, then start thinking")
     p.add_argument("--mind-endpoint", default=None, metavar="URL",
                    help="chat completions URL for --mind llm "
                         "(default env AERA_LLM_URL)")
@@ -74,7 +77,8 @@ def main(argv=None) -> str:
             seed=args.seed, viewer=viewer, init_from=args.init,
             lr=args.lr, resume_from=args.resume,
             mind=make_mind(args.mind, args.mind_endpoint, cache_path=cache),
-            mind_interval=args.mind_interval).train()
+            mind_interval=args.mind_interval,
+            mind_start=args.mind_start).train()
     return out
 
 

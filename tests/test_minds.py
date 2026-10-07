@@ -1,4 +1,5 @@
 import json
+import math
 
 import numpy as np
 
@@ -148,3 +149,67 @@ def test_mindhook_thinks_on_threat_without_waiting_for_timer(tmp_path):
     assert hook.count == n_thoughts + 1
     hook.flush(env)
     assert any("THOUGHT" in e for e in env.last_events)
+
+
+def test_goal_following_reward_for_forage():
+    cfg = Config.load("configs/field_small.json")
+    cfg.agent.mind_goal = True
+    env = AeraEnv(cfg)
+    env.reset(seed=0)
+    a, w = env.agent, env.world
+    w.tools.clear()
+    # a food right ahead of the rover: driving forward closes the distance
+    a.goal = "forage"
+    env._prev_food_dist = 3.0
+    fx = min(w.w - 2, a.x + 3)
+    for f in w.foods:
+        f.active = False
+    from aera.world.entities import Food
+    w.foods.append(Food(x=fx, y=a.y))
+    env._prev_food_dist = 3.0
+    obs, r, term, trunc, info = env.step(np.array([0.0, 1.0], np.float32))
+    assert info["sub"]["goal"] > 0, "closing on food while foraging must pay"
+    # goal removed → no goal shaping
+    a.goal = "explore"
+    env._prev_food_dist = 3.0
+    obs, r, term, trunc, info = env.step(np.array([0.0, 0.0], np.float32))
+    assert info["sub"]["goal"] == 0.0
+
+
+def test_flee_goal_pays_for_escaping():
+    cfg = Config.load("configs/field_small.json")
+    cfg.agent.mind_goal = True
+    env = AeraEnv(cfg)
+    env.reset(seed=0)
+    a, w = env.agent, env.world
+    from aera.world.entities import Predator
+    p = Predator(x=a.x + 2.0, y=a.y)
+    w.predators.append(p)
+    a.goal = "flee"
+    a.heading = 0.0                     # rover faces +x, away from nothing…
+    # predator is at +x; drive -x (turn south then east is complex — flee east
+    # past the predator is blocked; instead steer away: heading pi)
+    env._prev_threat_dist = 2.0
+    obs, r, term, trunc, info = env.step(np.array([-1.0, 0.6], np.float32))
+    env._prev_threat_dist = min(abs(p.x - a.x), 99.0)
+    a.heading = math.pi                 # due west, away from the predator
+    obs, r, term, trunc, info = env.step(np.array([0.0, 1.0], np.float32))
+    if abs(p.x - a.x) > 2.0:
+        assert info["sub"]["goal"] > 0
+
+
+def test_mind_start_holds_curriculum():
+    import os
+    from aera.training.trainer import MindHook
+    from aera.training.metrics import JsonlLogger
+    cfg = Config.load("configs/field_small.json")
+    cfg.agent.mind_goal = True
+    env = AeraEnv(cfg)
+    env.reset(seed=0)
+    hook = MindHook(RuleMind(), interval=10,
+                    logger=JsonlLogger(os.devnull), start=100)
+    hook.before_act(env, 50)
+    assert hook.count == 0 and env.agent.goal == "explore"
+    env.steps = 100
+    hook.before_act(env, 100)
+    assert hook.count == 1

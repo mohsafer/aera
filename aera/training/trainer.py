@@ -41,9 +41,11 @@ class MindHook:
 
     URGENT_CADENCE = 5    # urgent re-thinks at most every 5 steps (0.5 s)
 
-    def __init__(self, mind: Mind, interval: int, logger: JsonlLogger):
+    def __init__(self, mind: Mind, interval: int, logger: JsonlLogger,
+                 start: int = 0):
         self.mind = mind
         self.interval = max(1, interval)
+        self.start = max(0, start)   # mind curriculum: silent until this step
         self.logger = logger
         self.count = 0
         self.pending: list[str] = []
@@ -59,6 +61,9 @@ class MindHook:
         return env.world.terrain_at(env.agent.x, env.agent.y) == Terrain.LAVA
 
     def before_act(self, env: AeraEnv, global_step: int) -> None:
+        if global_step < self.start:
+            env.agent.goal = "explore"   # curriculum: constant slot until the
+            return                       # mind wakes up
         self.since_last.extend(env.last_events)
         self.since_last = self.since_last[-10:]
         new_episode = env.episode != self.last_episode
@@ -95,7 +100,8 @@ class Trainer:
                  rollout: int = 2048, seed: int = 0, viewer=None,
                  save_every_updates: int = 20, init_from: str | None = None,
                  lr: float | None = None, resume_from: str | None = None,
-                 mind: Mind | None = None, mind_interval: int = 25):
+                 mind: Mind | None = None, mind_interval: int = 25,
+                 mind_start: int = 0):
         self.config = config
         self.out = out_dir
         self.total_steps = total_steps
@@ -116,6 +122,7 @@ class Trainer:
         self.resume_from = resume_from
         self.mind = mind
         self.mind_interval = mind_interval
+        self.mind_start = mind_start
 
         os.makedirs(out_dir, exist_ok=True)
         self.logger = JsonlLogger(os.path.join(out_dir, "metrics.jsonl"))
@@ -128,7 +135,8 @@ class Trainer:
         obs_dim_ = obs_dim(self.config.agent)
         act_dim_ = action_dim(self.config.agent.kind)
         ppo = PPO(obs_dim_, act_dim_, seed=self.seed, **({"lr": self.lr} if self.lr else {}))
-        hook = (MindHook(self.mind, self.mind_interval, self.logger)
+        hook = (MindHook(self.mind, self.mind_interval, self.logger,
+                         start=self.mind_start)
                 if self.mind is not None else None)
         global_step, update = 0, 0
         if self.init_from:
