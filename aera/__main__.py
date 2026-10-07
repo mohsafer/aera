@@ -15,8 +15,10 @@ def main():
         from .scripts.sb3 import main as m
     elif cmd == "plot":
         from .scripts.plot import main as m
+    elif cmd == "compare":
+        from .scripts.compare import main as m
     else:
-        print("usage: python -m aera {train|watch|sb3|plot} [--help]")
+        print("usage: python -m aera {train|watch|sb3|plot|compare} [--help]")
         raise SystemExit(2)
     m(argv)
 
