@@ -74,6 +74,15 @@ lower `--save-every` via Trainer for finer checkpoints). Watch it live via
 same seed, `--mind rule` vs `--mind none`, compare returns; then LLMMind
 (export `AERA_LLM_URL`, `AERA_LLM_MODEL`) once an endpoint is chosen.
 
+## Latest experiment: goal-following reward tuning (v3, negative)
+
+v3 (hunger 0.5 + eat bonus) made foods WORSE (0.12/ep) — the per-goal
+telemetry caught the mechanism: continuous approach rewards let the policy
+*hover near food* collecting bonuses without eating. Next fix when resumed:
+event-based goal rewards (pay only on discrete events — eating, escaping,
+reaching — never on continuous approach distance). v3 verdict + analysis in
+`log.md`.
+
 ## The headline comparison
 
 `runs/walker_field_anomalies_s0/comparison_alien_vs_clean.png`: the same
