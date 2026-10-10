@@ -77,3 +77,19 @@ Ordering bug caught by the test: the eat bonus originally mutated
 the key. The goal block is the single place that writes `goal` shaping; the
 eat bonus lives there, detected via the "found food" event. v3 run launched
 (150k, :8889) against v2's 0.23 foods/ep benchmark.
+
+## v3 tuning verdict: also negative, and the telemetry explains why
+
+Hunger 0.5 + forage eat bonus → foods 0.12/ep (WORSE than v2's 0.23 and
+no-mind 0.53), return 46.1 (inflated by goal bonuses), speed 0.42. Forage
+became 44% of all thinking — and forage segments produce 0.01 foods per 100
+steps. The per-goal telemetry caught the mechanism: the follow reward pays
+CONTINUOUS approach, so the policy learned to *hover near food* — closing
+distance pays forever without ever making contact. A hovering local
+optimum that the discrete act of eating never requires it to leave.
+
+Principled fix (next experiment, not yet run): make goal rewards EVENT-based
+rather than continuous — forage pays only on eating (discrete), flee on
+escaping, navigate on reaching; drop the distance-approach matches
+entirely. Continuous shaping invites metric-gaming; discrete events are
+game-proof. RuleMind hunger threshold back to 0.35 (0.5 made it worse).
