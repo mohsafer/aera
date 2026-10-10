@@ -57,3 +57,23 @@ directly comparable to no-mind — hence the foods/speed/Walking comparison);
 foods/ep regression suggests a follow-reward tune (pay food pickup under
 forage more) as the next experiment. ToolUser@29 was the earliest boot
 pickup of any alien run.
+
+---
+
+## 2026-10-02 — follow-reward tuning + the resume-guard lesson
+
+Two follow-ups to the v2 verdict:
+1. **Budget parity running**: the v2 alien run resumed 300k → 600k with the
+   full mind state (`--mind rule` required on resume — first attempt without
+   it crashed on an obs-dim mismatch, now a clear resume error message).
+2. **Foods-regression tuning** (v3): the follow reward paid distance-closing
+   so well that the policy speed-ran goals instead of eating (0.23 foods/ep).
+   Two changes: RuleMind thresholds are now constructor parameters
+   (`--mind-hunger`, default 0.35 — v3 uses 0.5, foraging twice as early),
+   and eating under the forage goal pays an extra 2×w_goal.
+
+Ordering bug caught by the test: the eat bonus originally mutated
+`sub["goal"]` inside the food-pickup block — before the goal block created
+the key. The goal block is the single place that writes `goal` shaping; the
+eat bonus lives there, detected via the "found food" event. v3 run launched
+(150k, :8889) against v2's 0.23 foods/ep benchmark.
