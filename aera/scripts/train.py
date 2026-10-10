@@ -10,6 +10,7 @@ import argparse
 import os
 
 from ..config import Config
+from ..minds.base import RuleMind
 from ..training.trainer import Trainer, make_mind
 
 
@@ -47,6 +48,9 @@ def main(argv=None) -> str:
     p.add_argument("--mind-start", type=int, default=0, metavar="N",
                    help="mind curriculum: stay silent (constant explore goal) "
                         "until env step N, then start thinking")
+    p.add_argument("--mind-hunger", type=float, default=None, metavar="F",
+                   help="RuleMind hunger threshold (energy fraction below "
+                        "which the mind says forage; default 0.35)")
     p.add_argument("--mind-endpoint", default=None, metavar="URL",
                    help="chat completions URL for --mind llm "
                         "(default env AERA_LLM_URL)")
@@ -73,10 +77,13 @@ def main(argv=None) -> str:
     print(f"AERA training → {out}  (agent={config.agent.kind}, "
           f"world={config.world.name}, steps={args.steps}, mind={args.mind})")
     cache = (os.path.join(out, "mind_cache.json") if args.mind == "llm" else None)
+    mind = make_mind(args.mind, args.mind_endpoint, cache_path=cache)
+    if mind is not None and isinstance(mind, RuleMind) and args.mind_hunger is not None:
+        mind.hunger_threshold = args.mind_hunger
     Trainer(config, out, total_steps=args.steps, rollout=args.rollout,
             seed=args.seed, viewer=viewer, init_from=args.init,
             lr=args.lr, resume_from=args.resume,
-            mind=make_mind(args.mind, args.mind_endpoint, cache_path=cache),
+            mind=mind,
             mind_interval=args.mind_interval,
             mind_start=args.mind_start).train()
     return out

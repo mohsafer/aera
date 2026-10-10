@@ -184,6 +184,12 @@ class Trainer:
             path = (self.resume_from if os.path.isfile(self.resume_from)
                     else os.path.join(self.resume_from, "trainer_state.npz"))
             data = dict(np.load(path))
+            saved_obs = data["norm_mean"].shape[0]
+            if saved_obs != obs_dim_:
+                raise SystemExit(
+                    f"resume mismatch: checkpoint expects {saved_obs} obs dims, "
+                    f"config builds {obs_dim_} — pass the same --mind/--config "
+                    f"flags used by the original run")
             ppo.load_state_dict(data)
             env.episode = int(data["meta_episode"][0])
             global_step = int(data["meta_global_step"][0])

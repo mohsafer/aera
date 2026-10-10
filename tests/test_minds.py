@@ -213,3 +213,31 @@ def test_mind_start_holds_curriculum():
     env.steps = 100
     hook.before_act(env, 100)
     assert hook.count == 1
+
+
+def test_rule_mind_hunger_threshold_is_tunable():
+    env = make_env()
+    env.reset(seed=0)
+    s = build_summary(env)
+    s["energy"] = 0.45                     # above default 0.35, below tuned 0.5
+    assert RuleMind().decide(s).goal == "explore"
+    assert RuleMind(hunger_threshold=0.5).decide(s).goal == "forage"
+
+
+def test_forage_eat_pays_goal_bonus():
+    env = make_env()
+    env.reset(seed=0)
+    a, w = env.agent, env.world
+    w.tools.clear()
+    for f in w.foods:
+        f.active = False
+    from aera.world.entities import Food
+    w.foods.append(Food(x=a.x + 0.3, y=a.y))     # within pickup radius
+    a.goal = "forage"
+    events = []
+    sub = env._consequences(events)
+    assert a.foods_eaten == 1
+    assert sub["goal"] > 0, "eating under the forage goal pays the bonus"
+    a.goal = "explore"
+    env._consequences([])
+    # second food not present → no new goal bonus beyond matching explore

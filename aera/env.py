@@ -237,6 +237,8 @@ class AeraEnv(gym.Env):
                         if w.beacon is not None and not w.beacon.hit else None)
             sub["goal"] = rw.w_goal * self._goal_match(
                 a, w, sub, events, d_food, prev_food, d_threat, d_beacon)
+            if a.goal == "forage" and "found food" in events:
+                sub["goal"] += rw.w_goal * 2.0   # eating under forage: paid extra
             self._prev_threat_dist = d_threat
             self._prev_beacon_dist = d_beacon
         return sub

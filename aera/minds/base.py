@@ -92,31 +92,43 @@ class Mind:
 
 class RuleMind(Mind):
     """Deterministic survival heuristics — the baseline 'reasoning' that the
-    LLMMind must beat in the mind-audit A/B runs."""
+    LLMMind must beat in the mind-audit A/B runs. Thresholds are tunable so
+    experiments can adjust priorities without code edits."""
 
     name = "rule"
 
+    def __init__(self, hunger_threshold: float = 0.35,
+                 health_threshold: float = 0.35, threat_dist: float = 2.5,
+                 tool_dist: float = 8.0, bench_dist: float = 8.0,
+                 beacon_dist: float = 6.0):
+        self.hunger_threshold = hunger_threshold
+        self.health_threshold = health_threshold
+        self.threat_dist = threat_dist
+        self.tool_dist = tool_dist
+        self.bench_dist = bench_dist
+        self.beacon_dist = beacon_dist
+
     def decide(self, summary: dict, since_last: list[str] | None = None) -> Thought:
         threat = summary["nearest_threat_dist"]
-        if threat is not None and threat < 2.5:
+        if threat is not None and threat < self.threat_dist:
             return Thought("flee", f"threat {threat}m away — run")
-        if summary["health"] < 0.35:
+        if summary["health"] < self.health_threshold:
             return Thought("shelter", "hurt — avoid hazards, survive")
-        if summary["energy"] < 0.35:
+        if summary["energy"] < self.hunger_threshold:
             fd = summary["nearest_food_dist"]
             if fd is not None:
                 return Thought("forage", f"hungry, food {fd}m — eat")
             return Thought("forage", "starving — search for food")
         if ("boots" not in summary["inventory"]
                 and summary.get("nearest_tool_dist") is not None
-                and summary.get("nearest_tool_dist") < 8.0):
+                and summary.get("nearest_tool_dist") < self.tool_dist):
             return Thought("craft", "tool nearby — gear up")
         if (summary.get("components_held", 0) >= 2
                 and summary.get("nearest_workbench_dist") is not None
-                and summary["nearest_workbench_dist"] < 8.0):
+                and summary["nearest_workbench_dist"] < self.bench_dist):
             return Thought("craft", "components + bench — build protection")
         bd = summary["beacon_dist"]
-        if bd is not None and bd < 6.0:
+        if bd is not None and bd < self.beacon_dist:
             return Thought("navigate", f"beacon {bd}m — finish the job")
         return Thought("explore", "no urgent need — explore")
 
